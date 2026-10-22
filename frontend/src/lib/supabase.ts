@@ -456,6 +456,74 @@ export async function signInWithGoogleOAuth(redirectTo?: string, skipRedirect: b
 }
 
 /**
+ * Request a 6-digit Email OTP from Supabase via signInWithOtp
+ */
+export async function signInWithSupabaseEmailOtp(
+  email: string,
+  options?: {
+    shouldCreateUser?: boolean;
+    data?: Record<string, any>;
+    emailRedirectTo?: string;
+  }
+) {
+  try {
+    const { data, error } = await supabase.auth.signInWithOtp({
+      email: email.trim(),
+      options: {
+        shouldCreateUser: options?.shouldCreateUser ?? true,
+        data: options?.data,
+        emailRedirectTo: options?.emailRedirectTo,
+      },
+    });
+
+    if (error) {
+      throw error;
+    }
+    return data;
+  } catch (error: any) {
+    console.warn('Supabase signInWithOtp error:', error?.message);
+    throw error;
+  }
+}
+
+/**
+ * Verify a 6-digit Email OTP using verifyOtp (with automatic fallback between 'email' and 'signup')
+ */
+export async function verifySupabaseEmailOtp(email: string, token: string) {
+  const cleanEmail = email.trim();
+  const cleanToken = token.trim();
+
+  // 1. Try standard email OTP (used by signInWithOtp)
+  let { data, error } = await supabase.auth.verifyOtp({
+    email: cleanEmail,
+    token: cleanToken,
+    type: 'email',
+  });
+
+  // 2. If not matched, try signup confirmation OTP (used by signUp)
+  if (error) {
+    const signupRes = await supabase.auth.verifyOtp({
+      email: cleanEmail,
+      token: cleanToken,
+      type: 'signup',
+    });
+    if (!signupRes.error && signupRes.data?.user) {
+      data = signupRes.data;
+      error = null;
+    }
+  }
+
+  if (error) {
+    throw error;
+  }
+
+  return {
+    user: data.user,
+    session: data.session,
+  };
+}
+
+/**
  * Verify OTP / 6-digit verification code sent via Supabase email
  */
 export async function verifyOtpWithSupabase(

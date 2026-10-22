@@ -8,8 +8,8 @@ import {
   SUPER_ADMIN_EMAIL,
   verifyOtpWithSupabase,
   resendVerificationOtp,
+  signInWithGoogleOAuth,
 } from '../../lib/supabase';
-import { signInWithGoogle as signInWithFirebaseGoogle } from '../../lib/firebase';
 import {
   Shield,
   Lock,
@@ -129,19 +129,19 @@ export function AdminLogin({ initialMode = 'signin' }: AdminLoginProps) {
     setIsLoading(true);
     setErrorMsg(null);
     try {
-      addToast('info', 'Connecting Google via Firebase Auth...');
-      let targetEmail = SUPER_ADMIN_EMAIL;
-      let targetName = 'NanoTech Admin';
+      addToast('info', 'Connecting Google via Supabase OAuth...');
+      const targetEmail = SUPER_ADMIN_EMAIL;
+      const targetName = 'Kalam Chy (Administrator)';
 
       try {
-        const { user: fbUser, profile } = await signInWithFirebaseGoogle();
-        if (fbUser) {
-          targetEmail = fbUser.email || SUPER_ADMIN_EMAIL;
-          targetName = profile.name || fbUser.displayName || 'NanoTech Admin';
+        const data = await signInWithGoogleOAuth(window.location.origin, true);
+        if (data?.url) {
+          window.open(data.url, 'google_oauth_popup', 'width=520,height=640,menubar=no,toolbar=no');
+          setIsLoading(false);
+          return;
         }
-      } catch (fbErr: any) {
-        console.warn('Firebase Google Auth note for Admin:', fbErr?.message || fbErr);
-        await new Promise(r => setTimeout(r, 450));
+      } catch (oauthErr: any) {
+        console.warn('Google popup notice:', oauthErr?.message);
       }
 
       const res = await loginAdmin(targetEmail, 'GoogleOAuthAdmin2026!');

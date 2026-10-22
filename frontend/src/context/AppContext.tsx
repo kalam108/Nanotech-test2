@@ -48,11 +48,6 @@ import {
   resolveUserRole,
 } from '../lib/supabase';
 import {
-  signUpWithEmail as signUpWithFirebase,
-  signInWithEmail as signInWithFirebase,
-  syncCustomerToFirestore,
-} from '../lib/firebase';
-import {
   fetchServerProducts,
   fetchServerOrders,
   createProductOnServer,
@@ -749,35 +744,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let signedInUser: User | null = null;
     let signedInSeller: SellerProfile | null = null;
 
-    // 1. Attempt Firebase Auth login if password is provided
+    // 1. Attempt Supabase Auth login if password is provided
     if (password) {
       try {
-        const { user: fbUser, profile } = await signInWithFirebase(email, password);
-        if (fbUser) {
-          signedInUser = {
-            id: fbUser.uid,
-            name: displayName || profile.name || fbUser.displayName || email.split('@')[0],
-            email: fbUser.email || email,
-            role: finalRole,
-            phone: profile.phone,
-            status: 'active',
-            createdAt: new Date().toISOString(),
-            avatarUrl: fbUser.photoURL || undefined,
-          };
-        }
-      } catch (fbErr: any) {
-        console.warn('Firebase login check:', fbErr?.message);
-      }
-
-      // If not authenticated via Firebase, attempt Supabase Auth login
-      if (!signedInUser) {
-        try {
-          const result = await signInWithSupabase(email, password);
-          signedInUser = result.user;
-          signedInSeller = result.seller || null;
-        } catch (err: any) {
-          console.warn('Supabase online auth note:', err?.message);
-        }
+        const result = await signInWithSupabase(email, password);
+        signedInUser = result.user;
+        signedInSeller = result.seller || null;
+      } catch (err: any) {
+        console.warn('Supabase auth note:', err?.message);
       }
     }
 
@@ -841,9 +815,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setSellers(prev => [...prev, newSeller]);
     }
 
-    // Save profile to Supabase & Firestore in background
+    // Save profile to Supabase Database
     saveUserProfileToSupabase(signedInUser, signedInSeller);
-    syncCustomerToFirestore(signedInUser);
 
     addToast('success', `Welcome back, ${signedInUser.name}! (${signedInUser.role.toUpperCase()})`);
     setIsAuthModalOpen(false);
@@ -861,39 +834,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let createdUser: User | null = null;
     let createdSeller: SellerProfile | null = null;
 
-    // 1. Attempt Firebase Auth registration
+    // 1. Attempt Supabase Auth registration
     if (password) {
       try {
-        const { user: fbUser } = await signUpWithFirebase(email, password, name, phone);
-        if (fbUser) {
-          createdUser = {
-            id: fbUser.uid,
-            name,
-            email: fbUser.email || email,
-            phone,
-            role: finalRole,
-            status: 'active',
-            createdAt: new Date().toISOString(),
-          };
-        }
-      } catch (fbErr: any) {
-        console.warn('Firebase signup direct note:', fbErr?.message);
-      }
-
-      // If not registered via Firebase, attempt Supabase Auth registration
-      if (!createdUser) {
-        try {
-          const result = await signUpWithSupabase(email, password, {
-            fullName: name,
-            role: finalRole,
-            phone,
-            storeName: `${name} Hardware Studio`,
-          });
-          createdUser = result.user;
-          createdSeller = result.seller || null;
-        } catch (err: any) {
-          console.warn('Supabase signup direct note:', err?.message);
-        }
+        const result = await signUpWithSupabase(email, password, {
+          fullName: name,
+          role: finalRole,
+          phone,
+          storeName: `${name} Hardware Studio`,
+        });
+        createdUser = result.user;
+        createdSeller = result.seller || null;
+      } catch (err: any) {
+        console.warn('Supabase signup direct note:', err?.message);
       }
     }
 

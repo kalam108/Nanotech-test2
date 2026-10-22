@@ -5,9 +5,11 @@ import { useRouter } from 'next/navigation';
 import { Mail, Loader2, AlertCircle, CheckCircle2, ArrowLeft, X, Sparkles } from 'lucide-react';
 import { supabase } from '../../lib/supabase/client';
 import { useApp } from '../../context/AppContext';
-import { verifyEmailCode } from '../../lib/supabaseOtp';
-import { syncCustomerToFirestore } from '../../lib/firebase';
-import { syncCustomerToSupabaseStoreUser } from '../../lib/supabase';
+import {
+  syncCustomerToSupabaseStoreUser,
+  verifySupabaseEmailOtp,
+  signInWithSupabaseEmailOtp,
+} from '../../lib/supabase';
 
 interface VerifyCodeProps {
   email: string;
@@ -190,37 +192,20 @@ export function VerifyCode({
         sessionToken = `test_token_${Date.now()}`;
       }
 
-      // 2. Try Supabase Auth verifyOtp type: 'signup'
+      // 2. Verify OTP with Supabase (try both 'email' and 'signup' types)
       if (!verifiedUser) {
         try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            email: email.trim(),
-            token,
-            type: 'signup',
-          });
-          if (!error && data?.session && data?.user) {
-            verifiedUser = data.user;
-            sessionToken = data.session.access_token;
+          const otpResult = await verifySupabaseEmailOtp(email.trim(), token);
+          if (otpResult?.user) {
+            verifiedUser = otpResult.user;
+            sessionToken = otpResult.session?.access_token || `token_${Date.now()}`;
           }
-        } catch {}
+        } catch (otpErr: any) {
+          console.warn('Supabase verifyOtp notice:', otpErr?.message || otpErr);
+        }
       }
 
-      // 3. Try Supabase Auth verifyOtp type: 'email'
-      if (!verifiedUser) {
-        try {
-          const { data, error } = await supabase.auth.verifyOtp({
-            email: email.trim(),
-            token,
-            type: 'email',
-          });
-          if (!error && data?.session && data?.user) {
-            verifiedUser = data.user;
-            sessionToken = data.session.access_token;
-          }
-        } catch {}
-      }
-
-      // 4. Try custom OTP database / localStorage from supabaseOtp.ts
+      // 3. Fallback to custom OTP store if used
       if (!verifiedUser) {
         try {
           const otpRes = await verifyEmailCode(email.trim(), token, 'signup');
@@ -238,7 +223,7 @@ export function VerifyCode({
         } catch {}
       }
 
-      // 5. Verification Successful
+      // 4. Verification Successful
       if (verifiedUser) {
         const metadata = verifiedUser.user_metadata || {};
         const metaFullName =
@@ -266,7 +251,7 @@ export function VerifyCode({
           joined: new Date().toISOString().split('T')[0],
           lastLogin: new Date().toISOString(),
           isLiveSession: true,
-          source: 'Email Verification OTP & Firestore',
+          source: 'Supabase Email OTP',
         };
 
         if (typeof window !== 'undefined') {
@@ -295,8 +280,7 @@ export function VerifyCode({
             );
           } catch {}
 
-          // Mirror to both Firestore and Supabase databases
-          syncCustomerToFirestore(customerProfile);
+          // Mirror directly to Supabase store_users table
           syncCustomerToSupabaseStoreUser(customerProfile);
 
           window.dispatchEvent(new Event('auth-state-change'));
@@ -322,7 +306,7 @@ export function VerifyCode({
     }
   };
 
-  // Resend OTP code
+  // Resend OTP code via Supabase Email OTP
   const handleResend = async () => {
     if (!canResend || resending) return;
 
@@ -331,23 +315,32 @@ export function VerifyCode({
     setSuccessNotice('');
 
     try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email.trim(),
-      });
-
-      if (error) {
-        console.error('[auth]', error);
-        setErrorMessage(error.message || 'Failed to resend code. Please try again.');
-      } else {
-        setSuccessNotice(`New code sent to ${email}`);
-        setCountdown(60);
-        setCanResend(false);
-        setDigits(['', '', '', '', '', '']);
-        inputRefs.current[0]?.focus();
+      // 1. Try sending email OTP via signInWithOtp
+      let sent = false;
+      try {
+        await signInWithSupabaseEmailOtp(email.trim());
+        sent = true;
+      } catch (signInErr: any) {
+        console.warn('signInWithOtp resend note:', signInErr?.message);
       }
-    } catch {
-      setErrorMessage('Failed to resend verification code. Please try again.');
+
+      // 2. Fallback to signup resend
+      if (!sent) {
+        const { error } = await supabase.auth.resend({
+          type: 'signup',
+          email: email.trim(),
+        });
+        if (error) throw error;
+      }
+
+      setSuccessNotice(`New six-digit code sent to ${email}`);
+      setCountdown(60);
+      setCanResend(false);
+      setDigits(['', '', '', '', '', '']);
+      inputRefs.current[0]?.focus();
+    } catch (err: any) {
+      console.error('[auth resend error]', err);
+      setErrorMessage(err?.message || 'Failed to resend code. Please try again.');
     } finally {
       setResending(false);
     }

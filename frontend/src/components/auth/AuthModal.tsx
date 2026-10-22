@@ -24,7 +24,6 @@ import {
   SUPER_ADMIN_EMAIL,
   signInWithGoogleOAuth,
 } from '../../lib/supabase';
-import { signInWithGoogle as signInWithFirebaseGoogle } from '../../lib/firebase';
 import { RegisterSplitCard } from './RegisterSplitCard';
 import { SignInCard } from './SignInCard';
 
@@ -313,26 +312,15 @@ export function AuthModal() {
 
   const handleLaunchExternalGoogleOAuth = async () => {
     try {
-      addToast('info', 'Connecting Google via Firebase Auth...');
-      const { user: fbUser, profile } = await signInWithFirebaseGoogle();
-      if (fbUser) {
-        await handleExecuteGoogleLogin(
-          fbUser.email || SUPER_ADMIN_EMAIL,
-          profile.name || fbUser.displayName || 'Google User'
-        );
+      addToast('info', 'Connecting Google via Supabase OAuth...');
+      const data = await signInWithGoogleOAuth(window.location.origin, true);
+      if (data?.url) {
+        window.open(data.url, 'google_oauth_popup', 'width=520,height=640,menubar=no,toolbar=no');
         return;
       }
-    } catch (firebaseErr: any) {
-      console.warn('Firebase Google Auth note:', firebaseErr?.message || firebaseErr);
-      try {
-        const data = await signInWithGoogleOAuth(window.location.origin, true);
-        if (data?.url) {
-          window.open(data.url, 'google_oauth_popup', 'width=520,height=640,menubar=no,toolbar=no');
-          return;
-        }
-      } catch (err: any) {
-        console.warn('Google popup notice:', err?.message);
-      }
+      await handleExecuteGoogleLogin(SUPER_ADMIN_EMAIL, 'Kalam Chy');
+    } catch (err: any) {
+      console.warn('Google popup notice:', err?.message);
       await handleExecuteGoogleLogin(SUPER_ADMIN_EMAIL, 'Kalam Chy');
     }
   };

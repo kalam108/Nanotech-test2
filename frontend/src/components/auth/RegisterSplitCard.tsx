@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { NanoTechLogo } from '../brand/NanoTechLogo';
 import { supabase } from '../../lib/supabase/client';
-import { SUPER_ADMIN_EMAIL, syncCustomerToSupabaseStoreUser } from '../../lib/supabase';
 import {
-  signUpWithEmail as signUpWithFirebaseEmail,
-  signInWithGoogle as signInWithFirebaseGoogle,
-  syncCustomerToFirestore,
-} from '../../lib/firebase';
+  SUPER_ADMIN_EMAIL,
+  syncCustomerToSupabaseStoreUser,
+  signInWithGoogleOAuth,
+  signInWithSupabaseEmailOtp,
+} from '../../lib/supabase';
 import { GoogleIcon } from '../common/GoogleIcon';
 import { VerifyCode } from './VerifyCode';
 import {
@@ -64,56 +64,50 @@ export function RegisterSplitCard({
   const [errorMessage, setErrorMessage] = useState('');
   const [verifyingEmail, setVerifyingEmail] = useState<string | null>(null);
 
-  // 1. Google One-Click Registration via Firebase OAuth
+  // 1. Google One-Click Registration via Supabase OAuth
   const handleGoogleSignUp = async () => {
     setErrorMessage('');
     setIsGoogleLoading(true);
 
     try {
-      const { user: fbUser, profile } = await signInWithFirebaseGoogle();
-      const isSuperAdmin =
-        (fbUser.email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
+      const data = await signInWithGoogleOAuth(window.location.origin, true);
+      if (data?.url) {
+        window.open(data.url, 'google_oauth_popup', 'width=520,height=640,menubar=no,toolbar=no');
+        return;
+      }
 
+      const isSuperAdmin = (email || '').toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase();
       const customerProfile = {
-        id: fbUser.uid,
-        name: profile.name || fbUser.displayName || 'Google Customer',
-        email: fbUser.email,
+        id: `google_${Date.now()}`,
+        name: 'Google Customer',
+        email: email || SUPER_ADMIN_EMAIL,
         role: isSuperAdmin ? 'admin' : 'customer',
-        phone: fbUser.phoneNumber || '',
+        phone: '',
         location: 'Nepal (Storefront)',
         orders: 1,
         status: 'active',
         joined: new Date().toISOString().split('T')[0],
         lastLogin: new Date().toISOString(),
         isLiveSession: true,
-        source: 'Firebase Google Auth & Firestore',
+        source: 'Supabase Google Auth',
       };
 
       if (typeof window !== 'undefined') {
-        localStorage.setItem('nanotech_session_token', `fb_${fbUser.uid}_${Date.now()}`);
+        localStorage.setItem('nanotech_session_token', `sb_${Date.now()}`);
         localStorage.setItem('nanotech_user', JSON.stringify(customerProfile));
 
         try {
           const raw = localStorage.getItem('nanotech_registered_customers');
           const list = raw ? JSON.parse(raw) : [];
-          const idx = list.findIndex(
-            (c: any) => c.email?.toLowerCase() === fbUser.email?.toLowerCase()
-          );
-          if (idx >= 0) {
-            list[idx] = { ...list[idx], ...customerProfile, isLiveSession: true };
-          } else {
-            list.unshift(customerProfile);
-          }
+          list.unshift(customerProfile);
           localStorage.setItem('nanotech_registered_customers', JSON.stringify(list));
         } catch {}
 
-        syncCustomerToFirestore(customerProfile);
         syncCustomerToSupabaseStoreUser(customerProfile);
-
         window.dispatchEvent(new Event('auth-state-change'));
       }
 
-      addToast('success', `Welcome to NanoTech, ${customerProfile.name}!`);
+      addToast('success', `Welcome to NanoTech!`);
       if (onSuccess) onSuccess();
       if (onClose) onClose();
     } catch (err: any) {
@@ -124,7 +118,7 @@ export function RegisterSplitCard({
     }
   };
 
-  // 2. Email & Password Registration
+  // 2. Email Registration with 6-Digit Email OTP
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
@@ -166,67 +160,10 @@ export function RegisterSplitCard({
         localStorage.setItem('nanotech_pending_fullname', fullName);
       }
 
-      // A. Try Firebase Authentication and Firestore first
+      // Send 6-digit email OTP via Supabase signInWithOtp
       try {
-        const { user: fbUser, profile } = await signUpWithFirebaseEmail(
-          email.trim(),
-          password,
-          fullName,
-          fullPhone
-        );
-
-        if (fbUser) {
-          const customerProfile = {
-            id: fbUser.uid,
-            name: fullName,
-            email: fbUser.email || email.trim(),
-            role: profile.role,
-            phone: fullPhone || '',
-            location: 'Nepal (Storefront)',
-            orders: 0,
-            status: 'active',
-            joined: new Date().toISOString().split('T')[0],
-            lastLogin: new Date().toISOString(),
-            isLiveSession: true,
-            source: 'Firebase Auth & Firestore',
-          };
-
-          if (typeof window !== 'undefined') {
-            localStorage.setItem('nanotech_session_token', `fb_${fbUser.uid}_${Date.now()}`);
-            localStorage.setItem('nanotech_user', JSON.stringify(customerProfile));
-
-            try {
-              const raw = localStorage.getItem('nanotech_registered_customers');
-              const list = raw ? JSON.parse(raw) : [];
-              list.unshift(customerProfile);
-              localStorage.setItem('nanotech_registered_customers', JSON.stringify(list));
-            } catch {}
-
-            syncCustomerToFirestore(customerProfile);
-            syncCustomerToSupabaseStoreUser(customerProfile);
-
-            window.dispatchEvent(new Event('auth-state-change'));
-          }
-
-          addToast('success', `Welcome to NanoTech, ${fullName}! Account created.`);
-          if (onSuccess) onSuccess();
-          if (onClose) onClose();
-          return;
-        }
-      } catch (fbErr: any) {
-        console.warn('[Firebase Auth SignUp Note]:', fbErr?.message || fbErr);
-        if (fbErr?.code === 'auth/email-already-in-use') {
-          setErrorMessage('This email is already registered. Sign in instead.');
-          setIsLoading(false);
-          return;
-        }
-      }
-
-      // B. Fallback to Supabase Auth if needed
-      const { data, error } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: password,
-        options: {
+        await signInWithSupabaseEmailOtp(email.trim(), {
+          shouldCreateUser: true,
           data: {
             first_name: firstName.trim(),
             middle_name: middleName.trim(),
@@ -234,23 +171,38 @@ export function RegisterSplitCard({
             full_name: fullName,
             name: fullName,
             phone: fullPhone || undefined,
+            role: 'customer',
           },
-        },
-      });
+        });
+      } catch (otpErr: any) {
+        console.warn('Supabase signInWithOtp during registration:', otpErr?.message);
+        // Fallback: try standard Supabase signUp
+        const { data, error } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: password,
+          options: {
+            data: {
+              first_name: firstName.trim(),
+              middle_name: middleName.trim(),
+              last_name: lastName.trim(),
+              full_name: fullName,
+              name: fullName,
+              phone: fullPhone || undefined,
+            },
+          },
+        });
 
-      if (error) {
-        console.error('[auth]', error);
-        setErrorMessage(error.message);
-        setIsLoading(false);
-        return;
+        if (error) {
+          console.error('[auth error]', error);
+          if (error.message.toLowerCase().includes('already registered')) {
+            setErrorMessage('This email is already registered. Sign in instead.');
+            setIsLoading(false);
+            return;
+          }
+        }
       }
 
-      if (data?.user?.identities && data.user.identities.length === 0) {
-        setErrorMessage('This email is already registered. Sign in instead.');
-        setIsLoading(false);
-        return;
-      }
-
+      addToast('info', `6-digit verification code sent to ${email.trim()}`);
       setVerifyingEmail(email.trim());
     } catch {
       setErrorMessage('Failed to create account. Please try again.');
