@@ -21,78 +21,39 @@ export function CustomersSection() {
   const { logAdminAction, settings } = useAdmin();
   const { users, orders, updateUserStatus, addToast } = useApp();
 
+  const [selectedCustomerForOrders, setSelectedCustomerForOrders] = useState<User | null>(null);
+  const { updateOrderStatus } = useApp();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
-  // Merge any live logged in / registered customers from localStorage
-  const allUsers = React.useMemo(() => {
-    const list = [...users];
-    if (typeof window !== 'undefined') {
-      try {
-        const storedCustomerRaw = localStorage.getItem('nanotech_user');
-        if (storedCustomerRaw) {
-          const stored = JSON.parse(storedCustomerRaw);
-          if (stored && stored.email && stored.role === 'customer') {
-            const exists = list.some(u => u.email.toLowerCase() === stored.email.toLowerCase());
-            if (!exists) {
-              list.unshift({
-                id: stored.id || `usr-${Date.now()}`,
-                name: stored.name || 'Store Customer',
-                email: stored.email,
-                role: 'customer',
-                avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-                status: 'active',
-                createdAt: stored.joined || new Date().toISOString(),
-                lastLogin: stored.lastLogin || new Date().toISOString(),
-              });
-            }
-          }
-        }
-        const registeredRaw = localStorage.getItem('nanotech_registered_customers');
-        if (registeredRaw) {
-          const registeredList = JSON.parse(registeredRaw);
-          if (Array.isArray(registeredList)) {
-            registeredList.forEach(reg => {
-              if (reg && reg.email && !list.some(u => u.email.toLowerCase() === reg.email.toLowerCase())) {
-                list.unshift({
-                  id: reg.id || `usr-${Date.now()}`,
-                  name: reg.name || 'Store Customer',
-                  email: reg.email,
-                  role: 'customer',
-                  avatarUrl: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150',
-                  status: reg.status || 'active',
-                  createdAt: reg.joined || new Date().toISOString(),
-                  lastLogin: reg.lastLogin || new Date().toISOString(),
-                });
-              }
-            });
-          }
-        }
-      } catch {}
-    }
-    return list;
-  }, [users]);
+  const filteredUsers = React.useMemo(() => {
+    return users.filter((u) => {
+      const matchesSearch =
+        u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        u.email.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesRole = roleFilter === 'all' || u.role === roleFilter;
+      const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [users, searchQuery, roleFilter, statusFilter]);
 
-  const filteredUsers = allUsers.filter((u) => {
-    const matchesSearch =
-      u.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.id.toLowerCase().includes(searchQuery.toLowerCase());
-
-    const matchesRole = roleFilter === 'all' || u.role === roleFilter;
-    const matchesStatus = statusFilter === 'all' || u.status === statusFilter;
-
-    return matchesSearch && matchesRole && matchesStatus;
-  });
-
-  const handleStatusToggle = (u: User) => {
-    const newStatus = u.status === 'active' ? 'suspended' : 'active';
-    updateUserStatus(u.id, newStatus);
-    logAdminAction('Updated User Status', 'users', `User ${u.name} set to ${newStatus.toUpperCase()}`, u.id, u.name);
-    addToast(newStatus === 'active' ? 'success' : 'info', `User ${u.name} is now ${newStatus}.`);
+  const handleStatusToggle = (user: User) => {
+    const nextStatus = user.status === 'active' ? 'suspended' : 'active';
+    updateUserStatus(user.id, nextStatus);
+    logAdminAction('update_user_status', 'users', `Changed status for ${user.email} to ${nextStatus}`, user.id);
+    addToast('success', `${user.name} is now ${nextStatus}`);
   };
+
+  const customerOrdersList = React.useMemo(() => {
+    if (!selectedCustomerForOrders) return [];
+    return orders.filter(
+      (o) =>
+        o.buyerId === selectedCustomerForOrders.id ||
+        o.buyerEmail?.toLowerCase() === selectedCustomerForOrders.email.toLowerCase()
+    );
+  }, [selectedCustomerForOrders, orders]);
 
   return (
     <div className="space-y-6">
@@ -101,10 +62,10 @@ export function CustomersSection() {
         <div>
           <h2 className="text-xl font-black text-white tracking-tight flex items-center gap-2.5">
             <Users className="w-5 h-5 text-amber-400" />
-            Customer Accounts &amp; Lifetime Value
+            Customer Accounts &amp; Lifetime Orders
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            Registered customer profiles, transaction histories, access statuses, and permissions.
+            Registered customer emails, signup dates, and individual order history with status fulfillment.
           </p>
         </div>
 
@@ -134,8 +95,7 @@ export function CustomersSection() {
           className="bg-[#0a0b0e] border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-amber-500/60 font-medium"
         >
           <option value="all">All Roles</option>
-          <option value="buyer">Customer / Buyer</option>
-          <option value="seller">Seller</option>
+          <option value="customer">Customer / Buyer</option>
           <option value="admin">Admin</option>
         </select>
 
@@ -147,11 +107,10 @@ export function CustomersSection() {
           <option value="all">All Statuses</option>
           <option value="active">Active</option>
           <option value="suspended">Suspended</option>
-          <option value="pending">Pending</option>
         </select>
 
         <span className="text-xs text-slate-500 font-mono ml-auto">
-          {filteredUsers.length} users
+          {filteredUsers.length} customers
         </span>
       </div>
 
@@ -162,17 +121,16 @@ export function CustomersSection() {
             <thead>
               <tr className="border-b border-slate-800 bg-[#0e1015] text-[11px] font-bold text-slate-400 uppercase font-mono">
                 <th className="py-3.5 px-4">Customer</th>
-                <th className="py-3.5 px-3">Email &amp; Phone</th>
-                <th className="py-3.5 px-3">Role</th>
-                <th className="py-3.5 px-3">Lifetime Orders</th>
+                <th className="py-3.5 px-3">Email Address</th>
+                <th className="py-3.5 px-3">Signup Date</th>
+                <th className="py-3.5 px-3">Total Orders</th>
                 <th className="py-3.5 px-3">Status</th>
-                <th className="py-3.5 px-3">Joined Date</th>
                 <th className="py-3.5 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-850 text-slate-300 font-medium">
               {filteredUsers.map((u) => {
-                const userOrders = orders.filter((o) => o.buyerId === u.id || o.buyerEmail === u.email);
+                const userOrders = orders.filter((o) => o.buyerId === u.id || o.buyerEmail?.toLowerCase() === u.email.toLowerCase());
                 const totalSpent = userOrders.reduce((sum, o) => sum + o.total, 0);
 
                 return (
@@ -192,8 +150,8 @@ export function CustomersSection() {
                     </td>
 
                     <td className="py-3.5 px-3">
-                      <div className="text-white flex items-center gap-1.5">
-                        <Mail className="w-3 h-3 text-slate-500" />
+                      <div className="text-white flex items-center gap-1.5 font-mono">
+                        <Mail className="w-3.5 h-3.5 text-amber-400" />
                         <span>{u.email}</span>
                       </div>
                       {u.phone && (
@@ -204,19 +162,25 @@ export function CustomersSection() {
                       )}
                     </td>
 
-                    <td className="py-3.5 px-3">
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-900 border border-slate-800 text-amber-400 uppercase font-mono">
-                        {u.role}
-                      </span>
+                    <td className="py-3.5 px-3 text-slate-300 font-mono text-[11px]">
+                      <div className="flex items-center gap-1.5 text-slate-300">
+                        <Clock className="w-3 h-3 text-slate-500" />
+                        <span>{new Date(u.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+                      </div>
                     </td>
 
                     <td className="py-3.5 px-3">
-                      <div className="font-bold text-white">
-                        {settings.currencySymbol} {totalSpent.toLocaleString()}
-                      </div>
-                      <span className="text-[10px] text-slate-500 font-mono">
-                        {userOrders.length} Orders
-                      </span>
+                      <button
+                        onClick={() => setSelectedCustomerForOrders(u)}
+                        className="px-2.5 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
+                        title="View all orders for this customer"
+                      >
+                        <ShoppingBag className="w-3.5 h-3.5 text-amber-400" />
+                        <span>{userOrders.length} Orders</span>
+                        <span className="text-[10px] text-slate-400 font-mono font-normal">
+                          ({settings.currencySymbol} {totalSpent.toLocaleString()})
+                        </span>
+                      </button>
                     </td>
 
                     <td className="py-3.5 px-3">
@@ -231,21 +195,25 @@ export function CustomersSection() {
                       </span>
                     </td>
 
-                    <td className="py-3.5 px-3 text-slate-400 font-mono text-[11px]">
-                      {new Date(u.createdAt).toLocaleDateString()}
-                    </td>
-
                     <td className="py-3.5 px-3 text-right">
-                      <button
-                        onClick={() => handleStatusToggle(u)}
-                        className={`px-3 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                          u.status === 'active'
-                            ? 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300'
-                            : 'bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300'
-                        }`}
-                      >
-                        {u.status === 'active' ? 'Suspend' : 'Activate'}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        <button
+                          onClick={() => setSelectedCustomerForOrders(u)}
+                          className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-750 text-slate-200 text-[11px] font-bold border border-slate-700 transition"
+                        >
+                          View Orders
+                        </button>
+                        <button
+                          onClick={() => handleStatusToggle(u)}
+                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                            u.status === 'active'
+                              ? 'bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-300'
+                              : 'bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-300'
+                          }`}
+                        >
+                          {u.status === 'active' ? 'Suspend' : 'Activate'}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -254,6 +222,85 @@ export function CustomersSection() {
           </table>
         </div>
       </div>
+
+      {/* Customer All Orders Modal */}
+      {selectedCustomerForOrders && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-[#12141a] border border-amber-500/30 rounded-3xl max-w-3xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-sm font-black text-white flex items-center gap-2">
+                  <ShoppingBag className="w-4 h-4 text-amber-400" />
+                  Customer Orders: {selectedCustomerForOrders.name}
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Email: <span className="text-amber-300 font-mono">{selectedCustomerForOrders.email}</span> • Signup Date:{' '}
+                  <span className="text-slate-300 font-mono">
+                    {new Date(selectedCustomerForOrders.createdAt).toLocaleDateString()}
+                  </span>
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedCustomerForOrders(null)}
+                className="text-slate-400 hover:text-white px-2 py-1 rounded-lg bg-slate-800 text-xs font-bold"
+              >
+                Close
+              </button>
+            </div>
+
+            {customerOrdersList.length === 0 ? (
+              <div className="py-10 text-center text-slate-400 text-xs">
+                No orders recorded yet for {selectedCustomerForOrders.email}.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {customerOrdersList.map((ord) => (
+                  <div
+                    key={ord.id}
+                    className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  >
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-bold text-amber-400">#{ord.id.slice(-8)}</span>
+                        <span className="text-slate-400 font-mono text-[11px]">
+                          {new Date(ord.createdAt).toLocaleDateString()}
+                        </span>
+                        <span className="text-slate-400">• Payment: {ord.paymentMethod}</span>
+                      </div>
+                      <div className="text-slate-300 mt-1 font-medium">
+                        {ord.items.map((i) => `${i.quantity}x ${i.productTitle || i.title}`).join(', ')}
+                      </div>
+                      <div className="text-slate-400 text-[11px] mt-0.5">
+                        Total: <strong className="text-white">{settings.currencySymbol} {ord.total.toLocaleString()}</strong>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-[11px] text-slate-400">Order Status:</span>
+                      <select
+                        value={ord.status}
+                        onChange={(e) => {
+                          const nextStatus = e.target.value as any;
+                          updateOrderStatus(ord.id, nextStatus);
+                          logAdminAction('Updated Customer Order Status', 'orders', `Order #${ord.id.slice(-8)} set to ${nextStatus}`, ord.id);
+                          addToast('success', `Order #${ord.id.slice(-8)} status changed to ${nextStatus}`);
+                        }}
+                        className="bg-slate-950 border border-slate-700 text-amber-300 font-bold text-xs rounded-lg px-2.5 py-1 focus:outline-none"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="processing">Processing</option>
+                        <option value="shipped">Shipped</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

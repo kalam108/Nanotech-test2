@@ -147,64 +147,51 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     const path = currentPath;
 
-    // 1. SUPERADMIN ROUTES PROTECTION
-    if (path.startsWith('/superadmin')) {
-      if (path === '/superadmin/login') {
-        // If already logged in as superadmin, go to dashboard
-        if (currentUser && currentUser.role === 'superadmin') {
-          navigate('/superadmin/dashboard');
-        }
-        return;
+    // 1. SUPERADMIN ROUTES PROTECTION (/super-admin and /superadmin)
+    if (path === '/super-admin' || path.startsWith('/super-admin') || path.startsWith('/superadmin')) {
+      const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin';
+      
+      // Also check stored admin session
+      const storedAdminSession = typeof window !== 'undefined' ? localStorage.getItem('nanotech_admin_session') : null;
+      let sessionRole = null;
+      if (storedAdminSession) {
+        try {
+          const parsed = JSON.parse(storedAdminSession);
+          sessionRole = parsed?.role;
+        } catch {}
       }
+      const hasSuperAdminAuth = isSuperAdmin || sessionRole === 'super_admin' || sessionRole === 'superadmin';
 
-      // If not logged in, redirect to superadmin login
-      if (!currentUser) {
-        setSecurityNotice('Authentication required. Please log in with Superadmin credentials.');
-        navigate('/superadmin/login');
-        return;
-      }
-
-      // If logged in as customer, STRICTLY FORBIDDEN!
-      if (currentUser.role === 'customer') {
-        addAuditLog('FORBIDDEN_SUPERADMIN_ACCESS', path, `Customer ${currentUser.email} blocked from accessing ${path}`);
-        setSecurityNotice('Access Denied: Customer accounts are strictly prohibited from accessing the Superadmin console.');
-        navigate('/customer/dashboard');
-        return;
-      }
-
-      // If logged in as admin, STRICTLY FORBIDDEN!
-      if (currentUser.role === 'admin') {
-        addAuditLog('FORBIDDEN_SUPERADMIN_ACCESS', path, `Admin ${currentUser.email} blocked from accessing ${path}`);
-        setSecurityNotice('Access Denied: Standard administrators cannot access the Superadmin console (Reserved for Kalam).');
-        navigate('/admin/dashboard');
+      // Accessible ONLY to super_admin. Anyone else redirected to homepage.
+      if (!hasSuperAdminAuth) {
+        addAuditLog('FORBIDDEN_SUPERADMIN_ACCESS', path, `Unauthorized user blocked from accessing ${path}`);
+        setSecurityNotice('Access Denied: /super-admin is accessible only to super_admin.');
+        navigate('/');
         return;
       }
     }
 
-    // 2. ADMIN ROUTES PROTECTION
-    if (path.startsWith('/admin')) {
-      if (path === '/admin/login' || path === '/admin/signup' || path === '/admin/register') {
-        if (currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')) {
-          navigate('/admin/dashboard');
-        }
-        return;
-      }
+    // 2. ADMIN ROUTES PROTECTION (/admin)
+    if (path === '/admin' || path.startsWith('/admin')) {
+      const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin';
+      const isAdmin = currentUser?.role === 'admin' || isSuperAdmin;
 
-      // Check if admin is authenticated either via RBAC currentUser or stored admin session
+      // Check stored admin session
       const storedAdminSession = typeof window !== 'undefined' ? localStorage.getItem('nanotech_admin_session') : null;
-
-      // If not logged in at all, redirect to admin login
-      if (!currentUser && !storedAdminSession) {
-        setSecurityNotice('Authentication required. Please log into the Admin portal.');
-        navigate('/admin/login');
-        return;
+      let sessionRole = null;
+      if (storedAdminSession) {
+        try {
+          const parsed = JSON.parse(storedAdminSession);
+          sessionRole = parsed?.role;
+        } catch {}
       }
+      const hasAdminAuth = isAdmin || sessionRole === 'admin' || sessionRole === 'super_admin' || sessionRole === 'superadmin';
 
-      // If logged in as customer, STRICTLY FORBIDDEN!
-      if (currentUser && currentUser.role === 'customer' && !storedAdminSession) {
-        addAuditLog('FORBIDDEN_ADMIN_ACCESS', path, `Customer ${currentUser.email} blocked from accessing ${path}`);
-        setSecurityNotice('Access Denied: Customer accounts cannot access administrative routes.');
-        navigate('/customer/dashboard');
+      // Accessible ONLY to admin and super_admin. Anyone else redirected to homepage.
+      if (!hasAdminAuth) {
+        addAuditLog('FORBIDDEN_ADMIN_ACCESS', path, `Unauthorized user blocked from accessing ${path}`);
+        setSecurityNotice('Access Denied: /admin is accessible only to administrators.');
+        navigate('/');
         return;
       }
     }

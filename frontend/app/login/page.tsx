@@ -171,7 +171,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Success: persist session to localStorage and redirect to dashboard
+      // Success: read user's role from Supabase 'profiles' table
       const user = data.user;
       const metadata = user.user_metadata || {};
       const fullName =
@@ -180,11 +180,58 @@ export default function LoginPage() {
         cleanEmail.split('@')[0] ||
         'Customer';
 
+      // 1. Query role from "profiles" table
+      let resolvedRole: 'customer' | 'admin' | 'super_admin' = 'customer';
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, full_name, email')
+          .eq('id', user.id)
+          .maybeSingle();
+
+        if (profile?.role) {
+          const r = profile.role.toLowerCase();
+          if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+          else if (r === 'admin') resolvedRole = 'admin';
+          else resolvedRole = 'customer';
+        } else {
+          // If not found by id, query by email
+          const { data: profileByEmail } = await supabase
+            .from('profiles')
+            .select('role, full_name, email')
+            .ilike('email', cleanEmail)
+            .maybeSingle();
+          if (profileByEmail?.role) {
+            const r = profileByEmail.role.toLowerCase();
+            if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+            else if (r === 'admin') resolvedRole = 'admin';
+            else resolvedRole = 'customer';
+          } else if (metadata.role) {
+            const r = String(metadata.role).toLowerCase();
+            if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+            else if (r === 'admin') resolvedRole = 'admin';
+            else resolvedRole = 'customer';
+          }
+        }
+      } catch (profileFetchErr) {
+        console.warn('Error reading role from profiles:', profileFetchErr);
+        if (metadata.role) {
+          const r = String(metadata.role).toLowerCase();
+          if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+          else if (r === 'admin') resolvedRole = 'admin';
+        }
+      }
+
+      // Root administrator email safety override
+      if (cleanEmail === 'kalamchy88@gmail.com' || cleanEmail === 'nenotech108@gmail.com') {
+        resolvedRole = 'super_admin';
+      }
+
       const userProfile = {
         id: user.id,
         name: fullName,
         email: user.email || cleanEmail,
-        role: metadata.role || 'customer',
+        role: resolvedRole,
         status: 'active',
         joined: new Date().toISOString().split('T')[0],
         lastLogin: new Date().toISOString(),
@@ -192,19 +239,59 @@ export default function LoginPage() {
         source: 'Supabase Email OTP',
       };
 
+      if (typeof document !== 'undefined') {
+        document.cookie = `nanotech_role=${resolvedRole}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `nanotech_uid=${user.id}; path=/; max-age=604800; SameSite=Lax`;
+      }
+
       if (typeof window !== 'undefined') {
         const tokenStr = data.session?.access_token || `token_${Date.now()}`;
         localStorage.setItem('nanotech_session_token', tokenStr);
         localStorage.setItem('nanotech_user', JSON.stringify(userProfile));
         localStorage.setItem('nanotech_current_user', JSON.stringify(userProfile));
+
+        if (resolvedRole === 'admin' || resolvedRole === 'super_admin') {
+          localStorage.setItem(
+            'nanotech_admin_session',
+            JSON.stringify({
+              id: user.id,
+              name: fullName,
+              email: user.email || cleanEmail,
+              role: resolvedRole,
+              status: 'active',
+              permissions: ['all'],
+              createdAt: new Date().toISOString(),
+            })
+          );
+        }
+
         window.dispatchEvent(new Event('auth-state-change'));
       }
 
-      setSuccessMessage('Verification successful! Redirecting to dashboard...');
+      // Determine redirect destination based on role:
+      // super_admin -> /super-admin
+      // admin -> /admin
+      // customer -> / (store homepage)
+      let destination = '/';
+      if (resolvedRole === 'super_admin') {
+        destination = '/super-admin';
+      } else if (resolvedRole === 'admin') {
+        destination = '/admin';
+      } else {
+        destination = '/';
+      }
 
-      // Redirect to the dashboard
+      setSuccessMessage(
+        resolvedRole === 'super_admin'
+          ? 'Verification successful! Redirecting to Super Admin Console (/super-admin)...'
+          : resolvedRole === 'admin'
+          ? 'Verification successful! Redirecting to Admin Dashboard (/admin)...'
+          : 'Verification successful! Redirecting to the store homepage...'
+      );
+
+      // Redirect to the appropriate role destination
       setTimeout(() => {
-        router.push('/dashboard');
+        router.push(destination);
       }, 500);
     } catch (err: any) {
       setErrorMessage(err?.message || 'Verification failed. Please try again.');

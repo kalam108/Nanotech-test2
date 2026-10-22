@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   ArrowRight,
   Sparkles,
+  Sliders,
 } from 'lucide-react';
 
 export const SuperadminDashboardView: React.FC = () => {
@@ -38,23 +39,25 @@ export const SuperadminDashboardView: React.FC = () => {
 
           <div className="mt-5 flex flex-wrap gap-3">
             <button
-              onClick={() => navigate('/superadmin/admins')}
-              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md shadow-slate-900/10 transition"
+              onClick={() => navigate('/super-admin/users')}
+              className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-md shadow-slate-900/10 transition cursor-pointer"
             >
-              <UserCheck className="w-4 h-4 text-amber-400" />
-              Manage Staff Administrators ({admins.length})
+              <ShieldCheck className="w-4 h-4 text-amber-400" />
+              Manage All User Roles (Super Admin)
             </button>
             <button
-              onClick={() => navigate('/superadmin/permissions')}
-              className="bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition border border-slate-200 shadow-xs"
+              onClick={() => navigate('/super-admin/admins')}
+              className="bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition border border-slate-200 shadow-xs cursor-pointer"
             >
-              Configure RBAC Permissions Matrix
+              <UserCheck className="w-4 h-4 text-purple-600" />
+              Staff Administrators ({admins.length})
             </button>
             <button
-              onClick={() => navigate('/superadmin/settings')}
-              className="bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition border border-slate-200 shadow-xs"
+              onClick={() => navigate('/super-admin/settings')}
+              className="bg-white/80 hover:bg-white text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-xl flex items-center gap-2 transition border border-slate-200 shadow-xs cursor-pointer"
             >
-              Inspect Security Audit Logs
+              <Sliders className="w-4 h-4 text-blue-600" />
+              Manage Store Settings
             </button>
           </div>
         </div>

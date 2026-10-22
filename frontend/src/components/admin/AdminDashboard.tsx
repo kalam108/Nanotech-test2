@@ -107,8 +107,28 @@ export function AdminDashboard() {
         return <ContentManagementSection />;
       case 'users_roles':
       case 'admin_users':
+        if (currentAdmin?.role !== 'super_admin') {
+          return (
+            <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">
+              <h3 className="text-base font-bold text-slate-900">Access Restricted: Super Admin Only</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Admin accounts cannot change user roles, create super admins, or manage system permissions.
+              </p>
+            </div>
+          );
+        }
         return <UsersRolesSection />;
       case 'settings':
+        if (currentAdmin?.role !== 'super_admin') {
+          return (
+            <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">
+              <h3 className="text-base font-bold text-slate-900">Access Restricted: Super Admin Only</h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto">
+                Only the super_admin is authorized to modify store and platform settings.
+              </p>
+            </div>
+          );
+        }
         return <AdminSettingsSection />;
       case 'activity_logs':
       case 'audit_logs':

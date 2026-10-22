@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,
   full_name TEXT NOT NULL,
-  role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'seller', 'admin')),
+  role TEXT NOT NULL DEFAULT 'customer' CHECK (role IN ('customer', 'seller', 'admin', 'super_admin')),
   phone TEXT,
   avatar_url TEXT,
   status TEXT DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'pending')),
@@ -445,14 +445,16 @@ CREATE POLICY "All Access System Settings" ON public.system_settings FOR ALL USI
 -- ==============================================================================
 INSERT INTO public.profiles (id, email, full_name, role, phone, status)
 VALUES
-  ('user-super-admin-01', 'nenotech108@gmail.com', 'NanoTech Super Admin', 'admin', '+1 (800) 555-0199', 'active'),
+  ('user-super-admin-01', 'nenotech108@gmail.com', 'NanoTech Super Admin', 'super_admin', '+1 (800) 555-0199', 'active'),
+  ('user-super-admin-02', 'kalamchy88@gmail.com', 'Kalam Kumar (Super Admin)', 'super_admin', '+977 9852055346', 'active'),
+  ('user-admin-01', 'admin@nanotech.com', 'Raju Khadka (Admin)', 'admin', '+977 9845012345', 'active'),
   ('user-seller-1', 'contact@apextech.com', 'Apex Tech Solutions', 'seller', '+1 (555) 234-5678', 'active'),
   ('user-seller-2', 'sales@cyberbyte.io', 'CyberByte Refurbished', 'seller', '+1 (555) 876-5432', 'active'),
   ('user-customer-1', 'alex.rivera@example.com', 'Alex Rivera', 'customer', '+1 (555) 998-1122', 'active')
 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role;
 
--- Ensure Super Admin email always has admin role
-UPDATE public.profiles SET role = 'admin' WHERE LOWER(email) = LOWER('nenotech108@gmail.com');
+-- Ensure Super Admin emails always have super_admin role
+UPDATE public.profiles SET role = 'super_admin' WHERE LOWER(email) IN ('nenotech108@gmail.com', 'kalamchy88@gmail.com');
 
 -- ==============================================================================
 -- 16. SEED DATA STORE: HARDWARE SELLERS

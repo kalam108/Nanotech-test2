@@ -10,6 +10,7 @@ import {
   verifySupabaseEmailOtp,
   signInWithSupabaseEmailOtp,
 } from '../../lib/supabase';
+import { verifyEmailCode } from '../../lib/supabaseOtp';
 
 interface VerifyCodeProps {
   email: string;
@@ -241,11 +242,53 @@ export function VerifyCode({
         const fullName =
           metaFullName || pendingName || email.split('@')[0] || 'Customer';
 
+        const cleanEmail = (verifiedUser.email || email).trim().toLowerCase();
+
+        // Query role from "profiles" table
+        let resolvedRole: 'customer' | 'admin' | 'super_admin' = 'customer';
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role, full_name, email')
+            .eq('id', verifiedUser.id)
+            .maybeSingle();
+
+          if (profile?.role) {
+            const r = profile.role.toLowerCase();
+            if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+            else if (r === 'admin') resolvedRole = 'admin';
+            else resolvedRole = 'customer';
+          } else {
+            const { data: profileByEmail } = await supabase
+              .from('profiles')
+              .select('role, full_name, email')
+              .ilike('email', cleanEmail)
+              .maybeSingle();
+            if (profileByEmail?.role) {
+              const r = profileByEmail.role.toLowerCase();
+              if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+              else if (r === 'admin') resolvedRole = 'admin';
+              else resolvedRole = 'customer';
+            } else if (metadata.role) {
+              const r = String(metadata.role).toLowerCase();
+              if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+              else if (r === 'admin') resolvedRole = 'admin';
+            }
+          }
+        } catch (fetchRoleErr) {
+          console.warn('Could not read role from profiles:', fetchRoleErr);
+        }
+
+        // Root administrator email safety override
+        if (cleanEmail === 'kalamchy88@gmail.com' || cleanEmail === 'nenotech108@gmail.com') {
+          resolvedRole = 'super_admin';
+        }
+
         const customerProfile = {
           id: verifiedUser.id,
           name: fullName,
-          email: verifiedUser.email || email.trim(),
-          role: 'customer',
+          email: cleanEmail,
+          role: resolvedRole,
           status: 'active',
           location: 'Nepal (Storefront)',
           joined: new Date().toISOString().split('T')[0],
@@ -254,6 +297,11 @@ export function VerifyCode({
           source: 'Supabase Email OTP',
         };
 
+        if (typeof document !== 'undefined') {
+          document.cookie = `nanotech_role=${resolvedRole}; path=/; max-age=604800; SameSite=Lax`;
+          document.cookie = `nanotech_uid=${verifiedUser.id}; path=/; max-age=604800; SameSite=Lax`;
+        }
+
         if (typeof window !== 'undefined') {
           localStorage.removeItem('nanotech_pending_fullname');
           localStorage.setItem(
@@ -261,6 +309,22 @@ export function VerifyCode({
             sessionToken || `token_${Date.now()}`
           );
           localStorage.setItem('nanotech_user', JSON.stringify(customerProfile));
+          localStorage.setItem('nanotech_current_user', JSON.stringify(customerProfile));
+
+          if (resolvedRole === 'admin' || resolvedRole === 'super_admin') {
+            localStorage.setItem(
+              'nanotech_admin_session',
+              JSON.stringify({
+                id: verifiedUser.id,
+                name: fullName,
+                email: cleanEmail,
+                role: resolvedRole,
+                status: 'active',
+                permissions: ['all'],
+                createdAt: new Date().toISOString(),
+              })
+            );
+          }
 
           try {
             const raw = localStorage.getItem('nanotech_registered_customers');
@@ -287,9 +351,23 @@ export function VerifyCode({
         }
 
         addToast('success', `Email verified successfully! Welcome, ${fullName}.`);
-        router.refresh();
         if (onSuccess) onSuccess();
         if (onClose) onClose();
+
+        // Redirect based on role:
+        // super_admin -> /super-admin
+        // admin -> /admin
+        // customer -> / (store homepage)
+        let destination = '/';
+        if (resolvedRole === 'super_admin') {
+          destination = '/super-admin';
+        } else if (resolvedRole === 'admin') {
+          destination = '/admin';
+        } else {
+          destination = '/';
+        }
+
+        router.push(destination);
         return;
       }
 

@@ -24,13 +24,13 @@ export const SuperadminLayout: React.FC<{ children: ReactNode }> = ({ children }
   const { openDashboardHub, isDashboardHubOpen, closeDashboardHub } = useApp();
 
   const navItems = [
-    { label: 'Master Dashboard', path: '/superadmin/dashboard', icon: LayoutDashboard },
-    { label: 'Manage Administrators', path: '/superadmin/admins', icon: UserCheck },
-    { label: 'Customer Accounts', path: '/superadmin/customers', icon: Users },
-    { label: 'Global Products Control', path: '/superadmin/products', icon: Cpu },
-    { label: 'Orders & Financial Audit', path: '/superadmin/orders', icon: PackageCheck },
-    { label: 'RBAC Permissions Matrix', path: '/superadmin/permissions', icon: KeyRound },
-    { label: 'System Settings & Logs', path: '/superadmin/settings', icon: Sliders },
+    { label: 'Master Dashboard', path: '/super-admin', icon: LayoutDashboard },
+    { label: 'Manage All User Roles', path: '/super-admin/users', icon: ShieldAlert },
+    { label: 'Staff Administrators', path: '/super-admin/admins', icon: UserCheck },
+    { label: 'Customer Accounts', path: '/super-admin/customers', icon: Users },
+    { label: 'Global Products Control', path: '/super-admin/products', icon: Cpu },
+    { label: 'Orders & Fulfillment', path: '/super-admin/orders', icon: PackageCheck },
+    { label: 'Store & System Settings', path: '/super-admin/settings', icon: Sliders },
   ];
 
   return (

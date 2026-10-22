@@ -64,7 +64,10 @@ export function UsersRolesSection() {
   const [newAdminRole, setNewAdminRole] = useState<AdminRole>('manager');
 
   const handleAddAdmin = (e: React.FormEvent) => {
-    e.preventDefault();
+    if (currentAdmin?.role !== 'super_admin') {
+      addToast('error', 'Unauthorized: Only super_admin can manage roles or create accounts.');
+      return;
+    }
     if (!newAdminName.trim() || !newAdminEmail.trim()) return;
 
     const newEntry: AdminUser = {

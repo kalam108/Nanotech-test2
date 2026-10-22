@@ -158,8 +158,12 @@ export function AdminSidebar() {
     {
       title: 'SYSTEM',
       items: [
-        { id: 'users_roles', label: 'Users & Roles', icon: Shield },
-        { id: 'settings', label: 'Settings', icon: Settings },
+        ...(currentAdmin?.role === 'super_admin'
+          ? [
+              { id: 'users_roles' as AdminSubView, label: 'Users & Roles', icon: Shield },
+              { id: 'settings' as AdminSubView, label: 'Settings', icon: Settings },
+            ]
+          : []),
         { id: 'activity_logs', label: 'Activity Logs', icon: History },
         { id: 'backup', label: 'Backup', icon: Database },
       ],
@@ -167,6 +171,10 @@ export function AdminSidebar() {
   ];
 
   const handleNavClick = (view: AdminSubView) => {
+    // Admin must NOT access super admin settings or user role changes
+    if ((view === 'users_roles' || view === 'admin_users' || view === 'settings') && currentAdmin?.role !== 'super_admin') {
+      return;
+    }
     setAdminSubView(view);
     setIsMobileDrawerOpen(false);
   };
