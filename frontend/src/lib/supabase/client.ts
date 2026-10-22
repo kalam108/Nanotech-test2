@@ -1,0 +1,19 @@
+import { createBrowserClient } from '@supabase/ssr';
+
+export function createClient() {
+  const supabaseUrl =
+    (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SUPABASE_URL) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_URL) ||
+    'https://yjidtfznzmfhjtbrjnjo.supabase.co';
+
+  const supabaseKey =
+    (typeof process !== 'undefined' &&
+      (process.env?.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ||
+        process.env?.NEXT_PUBLIC_SUPABASE_ANON_KEY)) ||
+    (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_SUPABASE_ANON_KEY) ||
+    'sb_publishable_6sfIBAqpw9OLBKVMJJECPQ__I3OeBkO';
+
+  return createBrowserClient(supabaseUrl, supabaseKey);
+}
+
+export const supabase = createClient();

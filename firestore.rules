@@ -1,0 +1,120 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (matching auth.uid)
+// Fields:
+//   - uid: string (required, immutable) - Firebase Auth UID
+//   - email: string (required) - User's email address
+//   - displayName: string (optional) - Full name
+//   - photoURL: string (optional) - Avatar URL
+//   - role: string (required) - 'customer' | 'admin' | 'superadmin'
+//   - phone: string (optional) - Phone number
+//   - createdAt: timestamp (required, immutable) - Account creation timestamp
+//   - lastLoginAt: timestamp (optional) - Last sign-in timestamp
+//
+// Collection: customers
+// Document ID: {customerId} (customer ID or matching auth.uid)
+// Fields:
+//   - email: string (required) - Customer email
+//   - name: string (required) - Customer full name
+//   - phone: string (optional) - Contact number
+//   - location: string (optional) - City / Address
+//   - ordersCount: number (optional) - Total order count
+//   - status: string (required) - 'active' | 'suspended'
+//   - createdAt: timestamp (required)
+//
+// Collection: products
+// Document ID: {productId}
+// Fields:
+//   - name: string (required) - Product name
+//   - price: number (required) - Price in NPR
+//   - category: string (required) - Category slug/name
+//   - stock: number (required) - Available inventory
+//   - inStock: bool (required) - Stock flag
+//
+// Collection: orders
+// Document ID: {orderId}
+// Fields:
+//   - userId: string (required) - Ordering customer UID
+//   - customerEmail: string (required) - Customer email
+//   - totalNPR: number (required) - Total order sum
+//   - status: string (required) - 'Pending' | 'Processing' | 'Shipped' | 'Delivered'
+//   - createdAt: timestamp (required, immutable)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function uidUnchanged() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == request.auth.uid;
+    }
+
+    function uidNotModified() {
+      return !('uid' in request.resource.data) ||
+        request.resource.data.uid == resource.data.uid;
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.size() <= 254 &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    // ===============================================================
+    // Collection Rules
+    // ===============================================================
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId)
+                    && request.resource.data.email is string
+                    && isValidEmail(request.resource.data.email)
+                    && uidUnchanged();
+      allow update: if isOwner(userId)
+                    && uidNotModified()
+                    && (!('createdAt' in request.resource.data) || request.resource.data.createdAt == resource.data.createdAt);
+      allow delete: if false; // User deletion managed via Auth admin
+    }
+
+    // Customer Profiles Collection
+    match /customers/{customerId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isAuthenticated();
+      allow delete: if false;
+    }
+
+    // Products Collection (Publicly browseable by all customers)
+    match /products/{productId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+
+    // Orders Collection
+    match /orders/{orderId} {
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid ||
+        request.auth.token.email == 'kalamchy88@gmail.com'
+      );
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update: if isAuthenticated();
+      allow delete: if false;
+    }
+  }
+}

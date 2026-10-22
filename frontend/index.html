@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>| NanoTech Itahari-6 | </title>
+    <meta name="description" content="Nanotech Solution located at Itahari-6, National Galli. Official Computer Hardware, Custom Gaming PCs, Laptops, and Peripherals in Nepal." />
+    <meta property="og:title" content="nanotech-itahari6.ai.studio | NanoTech Marketplace & Hardware Studio" />
+    <meta property="og:description" content="Nanotech Solution - Itahari-6, National Galli. Contact: 9762379999, WhatsApp: 9852055346, Email: rajempty6@gmail.com" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <script>
+      window.process = window.process || { env: {} };
+      window.global = window.global || window;
+      // Gracefully prevent Vite HMR WebSocket disconnect noise from triggering window errors in iframe
+      window.addEventListener('error', function (e) {
+        if (
+          e?.message?.includes?.('WebSocket') ||
+          e?.filename?.includes?.('@vite/client') ||
+          e?.error?.stack?.includes?.('createWebSocketModuleRunnerTransport')
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      });
+      window.addEventListener('unhandledrejection', function (e) {
+        if (
+          e?.reason?.message?.includes?.('WebSocket') ||
+          e?.reason?.stack?.includes?.('createWebSocketModuleRunnerTransport') ||
+          e?.reason?.stack?.includes?.('@vite/client')
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      });
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+
