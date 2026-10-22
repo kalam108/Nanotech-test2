@@ -33,6 +33,7 @@
     "noEmit": true
   },
   "include": [
-    "src"
+    "src",
+    "app"
   ]
 }
