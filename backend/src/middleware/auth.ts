@@ -1,62 +1,113 @@
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest, ServerRole } from '../types';
-import { USERS, SESSIONS, addAuditLog } from '../store';
+import { AuthenticatedRequest, ServerUser, ServerRole } from '../types';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { addAuditLog } from '../store';
 
-export function authenticateToken(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+/**
+ * Middleware: Verify Bearer access token using Supabase Auth and database profiles table.
+ * Rejects with 401 if token is invalid or profile not found.
+ * Rejects with 403 if account status is not 'active'.
+ */
+export async function authenticateToken(
+  req: AuthenticatedRequest,
+  res: Response,
+  next: NextFunction
+) {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : (req.headers['x-session-token'] as string);
+  if (!authHeader) {
+    return next(); // Unauthenticated, req.user remains undefined
+  }
 
+  if (!authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized: Invalid token format. Expected Bearer <token>' });
+  }
+
+  const token = authHeader.slice(7).trim();
   if (!token) {
-    return next(); // unauthenticated, req.user is undefined
+    return res.status(401).json({ error: 'Unauthorized: Token is missing' });
   }
 
-  let user = SESSIONS.get(token);
+  try {
+    const { data, error } = await supabaseAdmin.auth.getUser(token);
+    if (error || !data?.user) {
+      return res.status(401).json({ error: 'Unauthorized: Invalid or expired token' });
+    }
 
-  // Resilient session rehydration if server reloaded or restarted
-  if (!user && token) {
-    if (token.includes('user-superadmin-kalam') || token.includes('kalam') || token.startsWith('nt_sess_superadmin')) {
-      user = USERS.find((u) => u.role === 'superadmin');
-    } else if (token.includes('user-admin-raju') || token.includes('user-admin-ramesh') || token.includes('admin') || token.startsWith('nt_sess_admin')) {
-      user = USERS.find((u) => u.role === 'admin');
-    } else if (token.startsWith('fallback_')) {
-      const id = token.replace('fallback_', '');
-      user = USERS.find((u) => u.id === id);
-    } else if (token.startsWith('nt_sess_')) {
-      const parts = token.split('_');
-      if (parts.length >= 4) {
-        const potentialId = parts.slice(3, parts.length - 2).join('_');
-        user = USERS.find((u) => u.id === potentialId || u.role === parts[2]);
-      }
-    }
-    if (user && user.status === 'active') {
-      SESSIONS.set(token, user);
-    }
-  }
+    const authUser = data.user;
 
-  if (user) {
-    if (user.status === 'disabled') {
-      SESSIONS.delete(token);
-      return res.status(403).json({ error: 'Account has been disabled by Superadmin' });
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', authUser.id)
+      .single();
+
+    if (profileError || !profile) {
+      return res.status(401).json({ error: 'Unauthorized: User profile not found' });
     }
+
+    if (profile.status && profile.status !== 'active') {
+      return res.status(403).json({ error: 'Forbidden: Account status is not active' });
+    }
+
+    const role = (profile.role || 'customer') as ServerRole;
+
+    const user: ServerUser = {
+      id: profile.id,
+      name: profile.full_name || profile.name || authUser.user_metadata?.full_name || 'User',
+      email: profile.email || authUser.email || '',
+      passwordHash: '',
+      role,
+      status: profile.status || 'active',
+      phone: profile.phone || '',
+      department: profile.department || '',
+      permissions: profile.permissions || [],
+      createdAt: profile.created_at || authUser.created_at || new Date().toISOString(),
+      lastLogin: new Date().toISOString(),
+    };
+
     req.user = user;
+    return next();
+  } catch (err: any) {
+    return res.status(401).json({ error: 'Unauthorized: Token verification failed' });
   }
-  next();
 }
 
+/**
+ * Require valid authenticated user session.
+ */
 export function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (!req.user) {
-    return res.status(401).json({ error: 'Unauthorized. Please log in.' });
+    return res.status(401).json({ error: 'Unauthorized: Authentication required. Please log in.' });
   }
-  next();
+  return next();
 }
 
-export function requireRole(allowedRoles: ServerRole[]) {
+/**
+ * Require specific user role(s).
+ * Supports checking 'admin', 'superadmin', 'super_admin', 'customer'.
+ */
+export function requireRole(allowedRoles: string[]) {
   return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: 'Unauthorized: Authentication required' });
     }
 
-    if (!allowedRoles.includes(req.user.role)) {
+    const currentRole = (req.user.role || '').toLowerCase();
+    const isSuper = currentRole === 'super_admin' || currentRole === 'superadmin';
+    const isAdmin = currentRole === 'admin';
+
+    const isAllowed = allowedRoles.some((r) => {
+      const allowed = r.toLowerCase();
+      if (allowed === 'superadmin' || allowed === 'super_admin') {
+        return isSuper;
+      }
+      if (allowed === 'admin') {
+        return isAdmin || isSuper;
+      }
+      return allowed === currentRole;
+    });
+
+    if (!isAllowed) {
       addAuditLog(
         req.user,
         'UNAUTHORIZED_ACCESS_ATTEMPT',
@@ -68,6 +119,7 @@ export function requireRole(allowedRoles: ServerRole[]) {
         requiredRoles: allowedRoles,
       });
     }
-    next();
+
+    return next();
   };
 }

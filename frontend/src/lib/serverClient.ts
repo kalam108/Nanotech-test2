@@ -1,4 +1,5 @@
 import { Product, Order } from '../types';
+import { supabase } from './supabase';
 
 export interface EndpointTestResult {
   endpoint: string;
@@ -25,6 +26,24 @@ export interface ServerStatusReport {
   superAdmin: string;
   geminiConfigured: boolean;
   endpoints: Array<{ path: string; method: string; status: string; desc: string }>;
+}
+
+/**
+ * Retrieve the current active Supabase access_token for backend authentication.
+ */
+async function getAuthHeaders(): Promise<Record<string, string>> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token =
+      session?.access_token ||
+      (typeof window !== 'undefined' ? localStorage.getItem('nanotech_session_token') : null);
+    if (token) {
+      return { Authorization: `Bearer ${token}` };
+    }
+  } catch {
+    // fallback
+  }
+  return {};
 }
 
 /**
@@ -125,9 +144,11 @@ export async function createProductOnServer(
   productData: Partial<Product>
 ): Promise<{ success: boolean; product?: Product; error?: string }> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    };
 
     const res = await fetch('/api/products', {
       method: 'POST',
@@ -153,9 +174,11 @@ export async function updateProductOnServer(
   updates: Partial<Product>
 ): Promise<{ success: boolean; product?: Product; error?: string }> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    };
 
     const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
       method: 'PUT',
@@ -180,9 +203,8 @@ export async function deleteProductOnServer(
   id: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = { ...authHeaders };
 
     const res = await fetch(`/api/products/${encodeURIComponent(id)}`, {
       method: 'DELETE',
@@ -204,11 +226,8 @@ export async function deleteProductOnServer(
  */
 export async function fetchServerOrders(): Promise<Order[]> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const res = await fetch('/api/orders', { headers });
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch('/api/orders', { headers: authHeaders });
     if (!res.ok) return [];
     const data = await res.json();
     return data.orders || [];
@@ -224,9 +243,11 @@ export async function createOrderOnServer(
   orderData: Partial<Order>
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    };
 
     const res = await fetch('/api/orders', {
       method: 'POST',
@@ -253,9 +274,11 @@ export async function updateOrderStatusOnServer(
   paymentStatus?: string
 ): Promise<{ success: boolean; order?: Order; error?: string }> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    };
 
     const res = await fetch(`/api/orders/${encodeURIComponent(id)}/status`, {
       method: 'PATCH',
@@ -288,9 +311,11 @@ export async function syncAllWithServer(
   error?: string;
 }> {
   try {
-    const token = localStorage.getItem('nanotech_session_token');
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const authHeaders = await getAuthHeaders();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    };
 
     const res = await fetch('/api/sync', {
       method: 'POST',
@@ -339,6 +364,7 @@ export async function testAllServerEndpoints(): Promise<EndpointTestResult[]> {
   ];
 
   const results: EndpointTestResult[] = [];
+  const authHeaders = await getAuthHeaders();
 
   for (const t of tests) {
     const start = performance.now();
@@ -346,14 +372,12 @@ export async function testAllServerEndpoints(): Promise<EndpointTestResult[]> {
       const options: RequestInit = {
         method: t.method,
       };
+      const headers: Record<string, string> = { ...authHeaders };
       if (t.body) {
-        options.headers = { 'Content-Type': 'application/json' };
+        headers['Content-Type'] = 'application/json';
         options.body = JSON.stringify(t.body);
       }
-      const token = localStorage.getItem('nanotech_session_token');
-      if (token) {
-        options.headers = { ...(options.headers || {}), Authorization: `Bearer ${token}` };
-      }
+      options.headers = headers;
 
       const res = await fetch(t.endpoint, options);
       const latencyMs = Math.max(1, Math.round(performance.now() - start));
@@ -433,4 +457,3 @@ export async function generateProductDescription(productInfo: {
     return { success: false, description: '', error: err?.message || 'Failed to generate product description' };
   }
 }
-

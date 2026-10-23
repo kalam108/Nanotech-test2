@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { PORT, getGoogleApiKey, SUPABASE_CONFIG } from '../config';
-import { SERVER_PRODUCTS, SERVER_ORDERS, SERVER_CATEGORIES, USERS, SESSIONS } from '../store';
+import { SERVER_PRODUCTS, SERVER_ORDERS, SERVER_CATEGORIES } from '../store';
 
 const router = Router();
 
@@ -17,8 +17,8 @@ router.get('/health', (_req, res) => {
     nodeVersion: process.version,
     productsCount: SERVER_PRODUCTS.length,
     ordersCount: SERVER_ORDERS.length,
-    rolesSupported: ['customer', 'admin', 'superadmin'],
-    superAdmin: 'Kalam — Superadmin',
+    rolesSupported: ['customer', 'admin', 'super_admin'],
+    superAdmin: 'Supabase RBAC Protected',
     deployment: 'Cloud & Localhost Ready',
   });
 });
@@ -43,9 +43,9 @@ router.get('/server/status', (_req, res) => {
     productsCount: SERVER_PRODUCTS.length,
     ordersCount: SERVER_ORDERS.length,
     categoriesCount: SERVER_CATEGORIES.length,
-    usersCount: USERS.length,
-    activeSessions: SESSIONS.size,
-    superAdmin: 'Kalam (Superadmin)',
+    usersCount: 0,
+    activeSessions: 0,
+    superAdmin: 'Supabase RBAC Protected',
     geminiConfigured: Boolean(activeApiKey),
     googleCloudConfigured: Boolean(activeApiKey),
     endpoints: [
@@ -55,7 +55,6 @@ router.get('/server/status', (_req, res) => {
       { path: '/api/products', method: 'GET / POST', status: 'active', desc: 'Product catalog CRUD' },
       { path: '/api/orders', method: 'GET / POST', status: 'active', desc: 'Order tracking & management' },
       { path: '/api/sync', method: 'POST', status: 'active', desc: 'Bi-directional state synchronization' },
-      { path: '/api/auth/login', method: 'POST', status: 'active', desc: 'User & admin authentication' },
       { path: '/api/auth/me', method: 'GET', status: 'active', desc: 'Session token validation' },
       { path: '/api/ai-advisor', method: 'POST', status: 'active', desc: 'Hardware AI advisor engine' },
       { path: '/api/generate-description', method: 'POST', status: 'active', desc: 'AI description copywriter' },
@@ -121,12 +120,10 @@ router.get('/weather', async (req, res) => {
 // Supabase Status Check
 router.get('/supabase/status', (_req, res) => {
   res.json({
-    configured: true,
-    projectId: SUPABASE_CONFIG.projectId,
+    configured: Boolean(SUPABASE_CONFIG.url),
     supabaseUrl: SUPABASE_CONFIG.url,
     hasPublishableKey: Boolean(SUPABASE_CONFIG.anonKey),
     hasSecretKey: Boolean(SUPABASE_CONFIG.serviceRoleKey),
-    superAdminEmail: SUPABASE_CONFIG.superAdminEmail,
     connectedTime: new Date().toISOString(),
   });
 });

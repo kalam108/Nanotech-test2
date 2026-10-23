@@ -1,4 +1,4 @@
-export type Role = 'customer' | 'admin' | 'superadmin';
+export type Role = 'customer' | 'admin' | 'super_admin';
 
 export type Permission =
   | 'products.view'

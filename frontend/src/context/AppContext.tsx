@@ -605,10 +605,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN' && session?.user) {
         const userEmail = session.user.email || '';
-        const userRole = resolveUserRole(
-          userEmail,
-          (session.user.user_metadata?.role as UserRole) || (userEmail === SUPER_ADMIN_EMAIL ? 'admin' : 'customer')
-        );
+        let userRole: UserRole = 'customer';
+
+        try {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .maybeSingle();
+          if (profile?.role) {
+            userRole = (profile.role as UserRole) || 'customer';
+          }
+        } catch {
+          userRole = 'customer';
+        }
 
         const meta = session.user.user_metadata || {};
         const metaFullName =
@@ -618,7 +628,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           'Customer';
 
         setCurrentUser(prev => {
-          if (prev.email.toLowerCase() === userEmail.toLowerCase() && prev.name === metaFullName) return prev;
+          if (prev.email.toLowerCase() === userEmail.toLowerCase() && prev.name === metaFullName && prev.role === userRole) return prev;
           return {
             id: session.user.id,
             name: metaFullName,
@@ -628,6 +638,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
             createdAt: session.user.created_at || new Date().toISOString(),
           };
         });
+
+        if (session.access_token) {
+          localStorage.setItem('nanotech_session_token', session.access_token);
+        }
       }
     });
 
@@ -744,46 +758,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let signedInUser: User | null = null;
     let signedInSeller: SellerProfile | null = null;
 
-    // 1. Attempt Supabase Auth login if password is provided
+    // Authenticate strictly with Supabase Auth
     if (password) {
       try {
         const result = await signInWithSupabase(email, password);
         signedInUser = result.user;
         signedInSeller = result.seller || null;
       } catch (err: any) {
-        console.warn('Supabase auth note:', err?.message);
+        addToast('error', err?.message || 'Supabase authentication failed');
+        return false;
       }
     }
 
-    // 2. Local fallback or existing user match
     if (!signedInUser) {
-      const existing = users.find(u => u.email.toLowerCase() === email.toLowerCase());
-      if (existing) {
-        signedInUser = {
-          ...existing,
-          role: resolveUserRole(email, existing.role),
-          name: displayName || existing.name,
-        };
-      } else {
-        signedInUser = {
-          id: `user-${Date.now()}`,
-          name: displayName || (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase() ? 'Kalam Chy' : email.split('@')[0]),
-          email,
-          role: finalRole,
-          status: 'active',
-          createdAt: new Date().toISOString(),
-          avatarUrl: email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()
-            ? 'https://lh3.googleusercontent.com/a/default-user'
-            : undefined,
-        };
-      }
-    } else if (displayName) {
-      signedInUser.name = displayName;
+      addToast('error', 'Authentication failed. Please verify your credentials.');
+      return false;
     }
 
-    // Ensure role is admin if super admin email
-    if (email.toLowerCase() === SUPER_ADMIN_EMAIL.toLowerCase()) {
-      signedInUser.role = 'admin';
+    if (displayName) {
+      signedInUser.name = displayName;
     }
 
     setUsers(prev => {
@@ -794,7 +787,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem('nanotech_current_user', JSON.stringify(signedInUser));
       localStorage.setItem('nanotech_user', JSON.stringify(signedInUser));
-      localStorage.setItem('nanotech_session_token', `token_${signedInUser.id}_${Date.now()}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        localStorage.setItem('nanotech_session_token', session.access_token);
+      }
     } catch {
       // ignore
     }
@@ -851,29 +847,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
 
     if (!createdUser) {
-      createdUser = {
-        id: `user-${Date.now()}`,
-        name,
-        email,
-        phone,
-        role: finalRole,
-        status: 'active',
-        createdAt: new Date().toISOString(),
-      };
-    }
-
-    if (finalRole === 'seller' && !createdSeller) {
-      createdSeller = {
-        id: `seller-${createdUser.id}`,
-        userId: createdUser.id,
-        storeName: `${name} Electronics`,
-        phone: phone || '+1 (555) 123-4567',
-        location: 'California, US',
-        status: 'verified',
-        rating: 5.0,
-        reviewCount: 0,
-        createdAt: new Date().toISOString(),
-      };
+      addToast('error', 'Registration failed with Supabase.');
+      return false;
     }
 
     setUsers(prev => [...prev.filter(u => u.email.toLowerCase() !== email.toLowerCase()), createdUser!]);
@@ -882,7 +857,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     try {
       localStorage.setItem('nanotech_current_user', JSON.stringify(createdUser));
       localStorage.setItem('nanotech_user', JSON.stringify(createdUser));
-      localStorage.setItem('nanotech_session_token', `token_${createdUser.id}_${Date.now()}`);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.access_token) {
+        localStorage.setItem('nanotech_session_token', session.access_token);
+      }
     } catch {
       // ignore
     }

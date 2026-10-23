@@ -353,14 +353,7 @@ export function AuthModal() {
     addToast('success', `A new SMS verification code was sent to NP+977 ${phone}`);
   };
 
-  // Super Admin 1-Click Autofill
-  const fillAdminCredentials = () => {
-    setLoginMethod('password');
-    setActiveView('login');
-    setEmailOrPhone(SUPER_ADMIN_EMAIL);
-    setPassword('Admin@12345');
-    setErrorMessage('');
-  };
+
 
 
 
@@ -1107,27 +1100,17 @@ export function AuthModal() {
           </span>
           <button
             type="button"
-            onClick={() => setShowAdminQuickAccess(!showAdminQuickAccess)}
+            onClick={() => {
+              setLoginMethod('password');
+              setActiveView('login');
+              setEmailOrPhone(SUPER_ADMIN_EMAIL);
+              setErrorMessage('');
+            }}
             className="text-slate-400 hover:text-slate-600 transition-colors underline cursor-pointer"
           >
-            {showAdminQuickAccess ? 'Hide Admin' : 'Admin Login'}
+            Admin Sign In
           </button>
         </div>
-
-        {showAdminQuickAccess && (
-          <div className="mt-2 p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs flex items-center justify-between animate-fadeIn">
-            <div className="text-[11px] font-mono text-slate-600 truncate pr-2">
-              <span>{SUPER_ADMIN_EMAIL}</span>
-            </div>
-            <button
-              type="button"
-              onClick={fillAdminCredentials}
-              className="text-[11px] font-semibold bg-slate-800 text-white px-2 py-1 rounded hover:bg-slate-900 cursor-pointer shrink-0"
-            >
-              Autofill
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

@@ -42,13 +42,13 @@ const DEFAULT_USERS: PlatformUser[] = [
     phone: '+977 9852055346',
   },
   {
-    id: 'usr_super_2',
-    name: 'NanoTech Super Admin',
-    email: 'nenotech108@gmail.com',
-    role: 'super_admin',
+    id: 'usr_admin_0',
+    name: 'NT Solution Admin',
+    email: 'ntsolution68@gmail.com',
+    role: 'admin',
     status: 'active',
     createdAt: '2025-01-10',
-    phone: '+977 9800000000',
+    phone: '+977 9852055346',
   },
   {
     id: 'usr_admin_1',
@@ -114,13 +114,15 @@ export const SuperadminUsersRolesView: React.FC = () => {
         const mapped: PlatformUser[] = profiles.map((p: any) => {
           let normalizedRole: 'customer' | 'admin' | 'super_admin' = 'customer';
           const r = String(p.role || '').toLowerCase();
-          if (r === 'super_admin' || r === 'superadmin') normalizedRole = 'super_admin';
+          if (r === 'super_admin') normalizedRole = 'super_admin';
           else if (r === 'admin') normalizedRole = 'admin';
           else normalizedRole = 'customer';
 
           // Master email overrides
-          if (p.email?.toLowerCase() === 'kalamchy88@gmail.com' || p.email?.toLowerCase() === 'nenotech108@gmail.com') {
+          if (p.email?.toLowerCase() === 'kalamchy88@gmail.com') {
             normalizedRole = 'super_admin';
+          } else if (p.email?.toLowerCase() === 'ntsolution68@gmail.com') {
+            normalizedRole = 'admin';
           }
 
           return {

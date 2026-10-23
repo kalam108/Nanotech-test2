@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Role, RBACUser, AuditLog, SystemSettings, Permission } from '../types/rbac';
 import { INITIAL_RBAC_USERS, INITIAL_AUDIT_LOGS, INITIAL_SYSTEM_SETTINGS } from '../data/rbacSeed';
+import { supabase } from '../lib/supabase/client';
 
 interface RBACContextType {
   currentUser: RBACUser | null;
@@ -15,7 +16,6 @@ interface RBACContextType {
   registerCustomer: (name: string, email: string, password: string, phone?: string) => Promise<{ success: boolean; error?: string }>;
   registerSuperadmin: (name: string, email: string, password: string, phone?: string, masterSecretKey?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
-  quickLoginAs: (targetRole: Role) => Promise<void>;
   admins: RBACUser[];
   addAdmin: (adminData: { name: string; email: string; password: string; phone?: string; department?: string; permissions: Permission[] }) => Promise<{ success: boolean; error?: string }>;
   toggleAdminStatus: (adminId: string) => Promise<void>;
@@ -32,6 +32,29 @@ interface RBACContextType {
 }
 
 const RBACContext = createContext<RBACContextType | undefined>(undefined);
+
+// Helper function to resolve role ONLY from Supabase profiles table
+export async function resolveSupabaseRole(userId: string, _email?: string): Promise<Role> {
+  // Read role strictly from Supabase profiles table
+  try {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (profile?.role) {
+      const r = String(profile.role).toLowerCase().trim();
+      if (r === 'super_admin' || r === 'superadmin') return 'super_admin';
+      if (r === 'admin') return 'admin';
+      return 'customer';
+    }
+  } catch (err) {
+    console.warn('Error reading role from profiles table:', err);
+  }
+
+  return 'customer';
+}
 
 export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Read initial path safely
@@ -56,65 +79,92 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Restore stored session if exists
+  // ROLE ONLY FROM SUPABASE: Read user session strictly from supabase.auth.getSession() + profiles table
+  // Do NOT trust localStorage keys "nanotech_admin_session" or "nanotech_user" to decide the role.
   useEffect(() => {
-    const storedToken = localStorage.getItem('nanotech_session_token');
-    const storedUser = localStorage.getItem('nanotech_user');
+    let isMounted = true;
 
-    if (storedToken && storedUser) {
+    const syncSupabaseAuth = async () => {
       try {
-        const parsed = JSON.parse(storedUser);
-        if (parsed?.name?.toLowerCase().includes('ramesh')) {
-          parsed.name = 'Raju Khadka';
-          if (parsed.id === 'user-admin-ramesh') parsed.id = 'user-admin-raju';
-          localStorage.setItem('nanotech_user', JSON.stringify(parsed));
-        }
-        setCurrentUser(parsed);
-        setToken(storedToken);
-      } catch (err) {
-        localStorage.removeItem('nanotech_session_token');
-        localStorage.removeItem('nanotech_user');
-      }
-    } else {
-      const storedAdminSession = localStorage.getItem('nanotech_admin_session');
-      if (storedAdminSession) {
-        try {
-          const parsedAdmin = JSON.parse(storedAdminSession);
-          if (parsedAdmin && parsedAdmin.email) {
-            if (parsedAdmin.name && parsedAdmin.name.toLowerCase().includes('ramesh')) {
-              parsedAdmin.name = 'Raju Khadka';
-              localStorage.setItem('nanotech_admin_session', JSON.stringify(parsedAdmin));
-            }
-            const role = (parsedAdmin.role === 'super_admin' ? 'superadmin' : 'admin') as Role;
-            const rbacAdmin: RBACUser = {
-              id: parsedAdmin.id || 'admin-root',
-              name: parsedAdmin.name || 'Admin',
-              email: parsedAdmin.email,
-              role,
-              status: 'active',
-              permissions: [
-                'products.view',
-                'products.create',
-                'products.edit',
-                'products.delete',
-                'orders.view',
-                'orders.edit',
-                'customers.view',
-                'customers.edit',
-                'reports.view',
-                'admins.manage',
-                'permissions.manage',
-                'settings.manage',
-                'audit_logs.view',
-              ],
-              createdAt: parsedAdmin.createdAt || new Date().toISOString(),
-            };
-            setCurrentUser(rbacAdmin);
-            setToken(`admin_session_token_${Date.now()}`);
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session?.user) {
+          if (isMounted) {
+            setCurrentUser(null);
+            setToken(null);
           }
-        } catch {}
+          return;
+        }
+
+        const authUser = session.user;
+        const resolvedRole = await resolveSupabaseRole(authUser.id, authUser.email || '');
+
+        if (!isMounted) return;
+
+        const rbacUser: RBACUser = {
+          id: authUser.id,
+          name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          email: authUser.email || '',
+          role: resolvedRole,
+          status: 'active',
+          permissions: resolvedRole === 'super_admin' ? [
+            'products.view', 'products.create', 'products.edit', 'products.delete',
+            'orders.view', 'orders.edit', 'customers.view', 'customers.edit',
+            'reports.view', 'admins.manage', 'permissions.manage', 'settings.manage',
+            'audit_logs.view',
+          ] : resolvedRole === 'admin' ? [
+            'products.view', 'products.create', 'products.edit',
+            'orders.view', 'orders.edit', 'customers.view', 'reports.view',
+          ] : ['products.view'],
+          createdAt: authUser.created_at || new Date().toISOString(),
+        };
+
+        setCurrentUser(rbacUser);
+        setToken(session.access_token);
+      } catch (err) {
+        console.error('Error synchronizing Supabase session:', err);
+        if (isMounted) {
+          setCurrentUser(null);
+          setToken(null);
+        }
       }
-    }
+    };
+
+    syncSupabaseAuth();
+
+    // Listen to real-time auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (session?.user) {
+        const authUser = session.user;
+        const resolvedRole = await resolveSupabaseRole(authUser.id, authUser.email || '');
+        const rbacUser: RBACUser = {
+          id: authUser.id,
+          name: authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'User',
+          email: authUser.email || '',
+          role: resolvedRole,
+          status: 'active',
+          permissions: resolvedRole === 'super_admin' ? [
+            'products.view', 'products.create', 'products.edit', 'products.delete',
+            'orders.view', 'orders.edit', 'customers.view', 'customers.edit',
+            'reports.view', 'admins.manage', 'permissions.manage', 'settings.manage',
+            'audit_logs.view',
+          ] : resolvedRole === 'admin' ? [
+            'products.view', 'products.create', 'products.edit',
+            'orders.view', 'orders.edit', 'customers.view', 'reports.view',
+          ] : ['products.view'],
+          createdAt: authUser.created_at || new Date().toISOString(),
+        };
+        setCurrentUser(rbacUser);
+        setToken(session.access_token);
+      } else {
+        setCurrentUser(null);
+        setToken(null);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // Route Navigation Helper
@@ -131,7 +181,7 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addAuditLog = (action: string, target: string, details: string) => {
     const newLog: AuditLog = {
       id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-      actorName: currentUser ? (currentUser.role === 'superadmin' ? 'Kalam' : currentUser.name) : 'Anonymous Guest',
+      actorName: currentUser ? (currentUser.role === 'super_admin' ? 'Kalam' : currentUser.name) : 'Anonymous Guest',
       actorEmail: currentUser ? currentUser.email : 'guest@client',
       actorRole: currentUser ? currentUser.role : 'customer',
       action,
@@ -143,27 +193,14 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   // ROUTE GUARD ENFORCEMENT
-  // Runs whenever currentPath or currentUser changes
+  // Requirement 6: If a customer opens /admin or /superadmin, redirect to the homepage.
+  // Admin must not see any option to change user roles; only super_admin can.
   useEffect(() => {
     const path = currentPath;
 
     // 1. SUPERADMIN ROUTES PROTECTION (/super-admin and /superadmin)
-    if (path === '/super-admin' || path.startsWith('/super-admin') || path.startsWith('/superadmin')) {
-      const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin';
-      
-      // Also check stored admin session
-      const storedAdminSession = typeof window !== 'undefined' ? localStorage.getItem('nanotech_admin_session') : null;
-      let sessionRole = null;
-      if (storedAdminSession) {
-        try {
-          const parsed = JSON.parse(storedAdminSession);
-          sessionRole = parsed?.role;
-        } catch {}
-      }
-      const hasSuperAdminAuth = isSuperAdmin || sessionRole === 'super_admin' || sessionRole === 'superadmin';
-
-      // Accessible ONLY to super_admin. Anyone else redirected to homepage.
-      if (!hasSuperAdminAuth) {
+    if (path === '/super-admin' || path.startsWith('/super-admin') || path === '/superadmin' || path.startsWith('/superadmin')) {
+      if (currentUser?.role !== 'super_admin') {
         addAuditLog('FORBIDDEN_SUPERADMIN_ACCESS', path, `Unauthorized user blocked from accessing ${path}`);
         setSecurityNotice('Access Denied: /super-admin is accessible only to super_admin.');
         navigate('/');
@@ -173,43 +210,11 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // 2. ADMIN ROUTES PROTECTION (/admin)
     if (path === '/admin' || path.startsWith('/admin')) {
-      const isSuperAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'superadmin';
-      const isAdmin = currentUser?.role === 'admin' || isSuperAdmin;
-
-      // Check stored admin session
-      const storedAdminSession = typeof window !== 'undefined' ? localStorage.getItem('nanotech_admin_session') : null;
-      let sessionRole = null;
-      if (storedAdminSession) {
-        try {
-          const parsed = JSON.parse(storedAdminSession);
-          sessionRole = parsed?.role;
-        } catch {}
-      }
-      const hasAdminAuth = isAdmin || sessionRole === 'admin' || sessionRole === 'super_admin' || sessionRole === 'superadmin';
-
-      // Accessible ONLY to admin and super_admin. Anyone else redirected to homepage.
-      if (!hasAdminAuth) {
-        addAuditLog('FORBIDDEN_ADMIN_ACCESS', path, `Unauthorized user blocked from accessing ${path}`);
+      const isAdminOrSuper = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
+      if (!isAdminOrSuper) {
+        addAuditLog('FORBIDDEN_ADMIN_ACCESS', path, `Customer or guest blocked from accessing ${path}`);
         setSecurityNotice('Access Denied: /admin is accessible only to administrators.');
         navigate('/');
-        return;
-      }
-    }
-
-    // 3. CUSTOMER PROTECTED ROUTES
-    if (path.startsWith('/customer')) {
-      const publicCustomerRoutes = ['/customer/login', '/customer/signup', '/customer/products'];
-      if (publicCustomerRoutes.includes(path)) {
-        if (currentUser && (path === '/customer/login' || path === '/customer/signup')) {
-          navigate('/customer/dashboard');
-        }
-        return;
-      }
-
-      // Protected customer views (e.g. /customer/dashboard, /customer/cart, /customer/orders, /customer/profile)
-      if (!currentUser) {
-        setSecurityNotice('Please log in or sign up to access your customer dashboard.');
-        navigate('/customer/login');
         return;
       }
     }
@@ -219,126 +224,76 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const userToken = tokenStr || `sess_${user.id}_${Date.now()}`;
     setCurrentUser(user);
     setToken(userToken);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('nanotech_session_token', userToken);
-      localStorage.setItem('nanotech_user', JSON.stringify(user));
-      localStorage.setItem(
-        'nanotech_admin_session',
-        JSON.stringify({
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          role: user.role === 'superadmin' ? 'super_admin' : user.role,
-          createdAt: user.createdAt,
-        })
-      );
-      window.dispatchEvent(new Event('auth-state-change'));
-    }
   };
 
+  // REMOVE FAKE LOGIN: Authenticate strictly via Supabase. Never log anyone in without Supabase confirming it.
   const login = async (
     email: string,
     password: string,
     requiredRole?: Role
   ): Promise<{ success: boolean; error?: string }> => {
     const normEmail = email.trim().toLowerCase();
-    const isSuperadminTarget = requiredRole === 'superadmin' || normEmail === 'kalamchy88@gmail.com';
 
     try {
-      let data: any = null;
+      // 1. Authenticate with Supabase Auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: normEmail,
+        password,
+      });
 
-      // 1. If superadmin, try /api/superadmin/login first
-      if (isSuperadminTarget) {
-        try {
-          const saRes = await fetch('/api/superadmin/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email.trim(), password }),
-          });
-          const saJson = await saRes.json();
-          if (saRes.ok && saJson.success && saJson.user) {
-            data = saJson;
-          }
-        } catch {}
+      if (error || !data.user) {
+        return { success: false, error: error?.message || 'Invalid email or password' };
       }
 
-      // 2. Otherwise or as fallback: try /api/auth/login
-      if (!data || !data.user) {
-        const response = await fetch('/api/auth/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: email.trim(), password, requiredRole }),
-        });
-        const json = await response.json();
-        if (response.ok && json.success && json.user) {
-          data = json;
-        } else if (!data) {
-          data = json;
-        }
+      // 2. Resolve role strictly from Supabase profiles table
+      const resolvedRole = await resolveSupabaseRole(data.user.id, normEmail);
+
+      // Verify portal requirement if provided
+      if (requiredRole && resolvedRole !== requiredRole && resolvedRole !== 'super_admin') {
+        await supabase.auth.signOut();
+        return { success: false, error: `Unauthorized: Account role is ${resolvedRole}` };
       }
 
-      // 3. Fallback to seed user if server response was unsuccessful for demo accounts
-      if (!data || !data.user || !data.success) {
-        const seedUser = INITIAL_RBAC_USERS.find(
-          (u) => u.email.toLowerCase() === normEmail
-        );
-        if (seedUser && (isSuperadminTarget || seedUser.role === requiredRole || !requiredRole)) {
-          const simToken = `sess_seed_${seedUser.id}_${Date.now()}`;
-          setSessionUser(seedUser, simToken);
-          addAuditLog('LOGIN_SUCCESS_SEED', '/api/auth/login', `Logged in via seed as ${seedUser.role} (${seedUser.name})`);
-          if (seedUser.role === 'superadmin') {
-            navigate('/superadmin/dashboard');
-          } else if (seedUser.role === 'admin') {
-            navigate('/admin/dashboard');
-          } else {
-            navigate('/customer/dashboard');
-          }
-          return { success: true };
-        }
+      const rbacUser: RBACUser = {
+        id: data.user.id,
+        name: data.user.user_metadata?.full_name || data.user.email?.split('@')[0] || 'User',
+        email: data.user.email || normEmail,
+        role: resolvedRole,
+        status: 'active',
+        permissions: resolvedRole === 'super_admin' ? [
+          'products.view', 'products.create', 'products.edit', 'products.delete',
+          'orders.view', 'orders.edit', 'customers.view', 'customers.edit',
+          'reports.view', 'admins.manage', 'permissions.manage', 'settings.manage',
+          'audit_logs.view',
+        ] : resolvedRole === 'admin' ? [
+          'products.view', 'products.create', 'products.edit',
+          'orders.view', 'orders.edit', 'customers.view', 'reports.view',
+        ] : ['products.view'],
+        createdAt: data.user.created_at || new Date().toISOString(),
+      };
 
-        return { success: false, error: data?.error || 'Invalid email or password' };
+      setCurrentUser(rbacUser);
+      setToken(data.session?.access_token || null);
+
+      if (typeof document !== 'undefined') {
+        document.cookie = `nanotech_role=${resolvedRole}; path=/; max-age=604800; SameSite=Lax`;
+        document.cookie = `nanotech_uid=${data.user.id}; path=/; max-age=604800; SameSite=Lax`;
       }
 
-      setSessionUser(data.user, data.token);
+      addAuditLog('LOGIN_SUCCESS', '/login', `Logged in via Supabase as ${resolvedRole} (${rbacUser.name})`);
 
-      addAuditLog('LOGIN_SUCCESS', '/api/auth/login', `Logged in as ${data.user.role} (${data.user.name})`);
-
-      // Route to respective dashboard
-      if (data.user.role === 'superadmin') {
-        navigate('/superadmin/dashboard');
-      } else if (data.user.role === 'admin') {
-        navigate('/admin/dashboard');
+      // Route to respective page
+      if (resolvedRole === 'super_admin') {
+        navigate('/super-admin');
+      } else if (resolvedRole === 'admin') {
+        navigate('/admin');
       } else {
-        navigate('/customer/dashboard');
+        navigate('/');
       }
 
       return { success: true };
-    } catch (err) {
-      // Fallback for offline seed verification
-      const seedUser = INITIAL_RBAC_USERS.find(
-        (u) => u.email.toLowerCase() === normEmail
-      );
-
-      if (!seedUser) {
-        return { success: false, error: 'User not found' };
-      }
-
-      if (requiredRole && seedUser.role !== requiredRole && seedUser.role !== 'superadmin') {
-        return { success: false, error: `Unauthorized: Account role is ${seedUser.role}` };
-      }
-
-      const simToken = `fallback_${seedUser.id}_${Date.now()}`;
-      setSessionUser(seedUser, simToken);
-
-      if (seedUser.role === 'superadmin') {
-        navigate('/superadmin/dashboard');
-      } else if (seedUser.role === 'admin') {
-        navigate('/admin/dashboard');
-      } else {
-        navigate('/customer/dashboard');
-      }
-
-      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Supabase authentication failed' };
     }
   };
 
@@ -348,42 +303,54 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password: string,
     phone?: string
   ): Promise<{ success: boolean; error?: string }> => {
+    const normEmail = email.trim().toLowerCase();
     try {
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, phone }),
+      const { data, error } = await supabase.auth.signUp({
+        email: normEmail,
+        password,
+        options: {
+          data: {
+            full_name: name,
+            phone: phone || '',
+          },
+        },
       });
 
-      const data = await response.json();
-
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Registration failed' };
+      if (error || !data.user) {
+        return { success: false, error: error?.message || 'Registration failed' };
       }
 
-      setCurrentUser(data.user);
-      setToken(data.token);
-      localStorage.setItem('nanotech_session_token', data.token);
-      localStorage.setItem('nanotech_user', JSON.stringify(data.user));
+      try {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email: normEmail,
+          full_name: name,
+          phone: phone || '',
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        });
+      } catch (upsertErr) {
+        console.warn('Profile upsert notice:', upsertErr);
+      }
 
-      navigate('/customer/dashboard');
-      return { success: true };
-    } catch (err) {
-      // Local fallback
+      const role = await resolveSupabaseRole(data.user.id, normEmail);
+
       const newUser: RBACUser = {
-        id: `user-customer-${Date.now()}`,
+        id: data.user.id,
         name,
-        email,
-        role: 'customer',
+        email: normEmail,
+        role,
         status: 'active',
         phone: phone || '',
         permissions: ['products.view'],
         createdAt: new Date().toISOString(),
       };
       setCurrentUser(newUser);
-      setToken(`fallback_${newUser.id}`);
-      navigate('/customer/dashboard');
+      setToken(data.session?.access_token || null);
+      navigate('/');
       return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Registration failed' };
     }
   };
 
@@ -392,110 +359,86 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     email: string,
     password: string,
     phone?: string,
-    masterSecretKey?: string
+    _masterSecretKey?: string
   ): Promise<{ success: boolean; error?: string }> => {
+    const normEmail = email.trim().toLowerCase();
+
     try {
-      const response = await fetch('/api/auth/register-superadmin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password, phone, masterSecretKey }),
+      const { data, error } = await supabase.auth.signUp({
+        email: normEmail,
+        password,
+        options: {
+          data: {
+            full_name: name,
+            phone: phone || '',
+          },
+        },
       });
 
-      const data = await response.json();
-      if (!response.ok) {
-        return { success: false, error: data.error || 'Superadmin registration failed' };
+      if (error || !data.user) {
+        return { success: false, error: error?.message || 'Superadmin registration failed' };
       }
 
-      setCurrentUser(data.user);
-      setToken(data.token);
-      localStorage.setItem('nanotech_session_token', data.token);
-      localStorage.setItem('nanotech_user', JSON.stringify(data.user));
+      try {
+        await supabase.from('profiles').upsert({
+          id: data.user.id,
+          email: normEmail,
+          full_name: name,
+          phone: phone || '',
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        });
+      } catch (upsertErr) {
+        console.warn('Profile upsert notice:', upsertErr);
+      }
 
-      const adminSession = {
-        id: data.user.id,
-        name: data.user.name,
-        email: data.user.email,
-        role: 'super_admin',
-        createdAt: data.user.createdAt,
-      };
-      localStorage.setItem('nanotech_admin_session', JSON.stringify(adminSession));
+      const role = await resolveSupabaseRole(data.user.id, normEmail);
 
-      navigate('/superadmin/dashboard');
-      return { success: true };
-    } catch (err: any) {
-      // Local fallback in case backend is offline
       const newSuperadmin: RBACUser = {
-        id: `user-superadmin-${Date.now()}`,
+        id: data.user.id,
         name,
-        email,
-        role: 'superadmin',
+        email: normEmail,
+        role,
         status: 'active',
         phone: phone || '+977 9852055346',
         department: 'Executive Board',
-        permissions: [
-          'products.view',
-          'products.create',
-          'products.edit',
-          'products.delete',
-          'orders.view',
-          'orders.edit',
-          'customers.view',
-          'customers.edit',
-          'reports.view',
-          'admins.manage',
-          'permissions.manage',
-          'settings.manage',
+        permissions: role === 'super_admin' ? [
+          'products.view', 'products.create', 'products.edit', 'products.delete',
+          'orders.view', 'orders.edit', 'customers.view', 'customers.edit',
+          'reports.view', 'admins.manage', 'permissions.manage', 'settings.manage',
           'audit_logs.view',
-        ],
+        ] : ['products.view'],
         createdAt: new Date().toISOString(),
       };
-      setCurrentUser(newSuperadmin);
-      setToken(`fallback_${newSuperadmin.id}`);
-      localStorage.setItem('nanotech_session_token', `fallback_${newSuperadmin.id}`);
-      localStorage.setItem('nanotech_user', JSON.stringify(newSuperadmin));
-      localStorage.setItem('nanotech_admin_session', JSON.stringify({
-        id: newSuperadmin.id,
-        name: newSuperadmin.name,
-        email: newSuperadmin.email,
-        role: 'super_admin',
-      }));
 
-      navigate('/superadmin/dashboard');
+      setCurrentUser(newSuperadmin);
+      setToken(data.session?.access_token || null);
+
+      navigate(role === 'super_admin' ? '/super-admin' : '/');
       return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Superadmin registration failed' };
     }
   };
 
   const logout = async () => {
     try {
-      if (token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      }
-    } catch {
-      // Ignore network errors on logout
-    } finally {
-      if (currentUser) {
-        addAuditLog('LOGOUT', '/logout', `User ${currentUser.email} logged out`);
-      }
-      setCurrentUser(null);
-      setToken(null);
+      await supabase.auth.signOut();
+    } catch (err) {
+      console.warn('Supabase signOut notice:', err);
+    }
+    setCurrentUser(null);
+    setToken(null);
+    if (typeof document !== 'undefined') {
+      document.cookie = 'nanotech_role=; path=/; max-age=0';
+      document.cookie = 'nanotech_uid=; path=/; max-age=0';
+    }
+    try {
       localStorage.removeItem('nanotech_session_token');
       localStorage.removeItem('nanotech_user');
-      navigate('/');
-    }
-  };
-
-  // Quick Switcher for testing and verifying roles
-  const quickLoginAs = async (targetRole: Role) => {
-    if (targetRole === 'superadmin') {
-      await login('kalamchy88@gmail.com', 'Kalam@123');
-    } else if (targetRole === 'admin') {
-      await login('admin@nanotech.com', 'Admin@123');
-    } else {
-      await login('customer@nanotech.com', 'Customer@123');
-    }
+      localStorage.removeItem('nanotech_admin_session');
+    } catch {}
+    navigate('/');
   };
 
   const addAdmin = async (adminData: {
@@ -506,7 +449,7 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     department?: string;
     permissions: Permission[];
   }): Promise<{ success: boolean; error?: string }> => {
-    if (!currentUser || currentUser.role !== 'superadmin') {
+    if (!currentUser || currentUser.role !== 'super_admin') {
       return { success: false, error: 'Only Kalam (Superadmin) can create administrators.' };
     }
 
@@ -529,34 +472,19 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       addAuditLog('ADMIN_CREATED', adminData.email, `Superadmin created admin "${adminData.name}"`);
       return { success: true };
     } catch {
-      // Local state fallback
-      const newAdmin: RBACUser = {
-        id: `user-admin-${Date.now()}`,
-        name: adminData.name,
-        email: adminData.email,
-        role: 'admin',
-        status: 'active',
-        phone: adminData.phone || '',
-        permissions: adminData.permissions,
-        createdAt: new Date().toISOString(),
-      };
-      setAdmins((prev) => [newAdmin, ...prev]);
-      addAuditLog('ADMIN_CREATED', adminData.email, `Superadmin created admin "${adminData.name}"`);
-      return { success: true };
+      return { success: false, error: 'Network error creating administrator.' };
     }
   };
 
   const toggleAdminStatus = async (adminId: string) => {
-    if (!currentUser || currentUser.role !== 'superadmin') return;
+    if (!currentUser || currentUser.role !== 'super_admin') return;
 
     try {
       await fetch(`/api/superadmin/admins/${adminId}/toggle-status`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch {
-      // Fallback
-    }
+    } catch {}
 
     setAdmins((prev) =>
       prev.map((adm) => {
@@ -571,14 +499,14 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   };
 
   const updateSystemSettings = (updates: Partial<SystemSettings>) => {
-    if (!currentUser || currentUser.role !== 'superadmin') return;
+    if (!currentUser || currentUser.role !== 'super_admin') return;
     setSystemSettings((prev) => ({ ...prev, ...updates }));
     addAuditLog('SYSTEM_SETTINGS_UPDATED', 'Global Configuration', 'Updated store/maintenance configuration');
   };
 
   const hasPermission = (permission: Permission): boolean => {
     if (!currentUser) return false;
-    if (currentUser.role === 'superadmin') return true;
+    if (currentUser.role === 'super_admin') return true;
     return currentUser.permissions.includes(permission);
   };
 
@@ -597,7 +525,6 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         registerCustomer,
         registerSuperadmin,
         logout,
-        quickLoginAs,
         admins,
         addAdmin,
         toggleAdminStatus,
@@ -639,7 +566,6 @@ const defaultRBACContext: RBACContextType = {
   registerCustomer: async () => ({ success: false, error: 'Context initializing' }),
   registerSuperadmin: async () => ({ success: false, error: 'Context initializing' }),
   logout: async () => {},
-  quickLoginAs: async () => {},
   admins: INITIAL_RBAC_USERS.filter((u) => u.role === 'admin'),
   addAdmin: async () => ({ success: false }),
   toggleAdminStatus: async () => {},

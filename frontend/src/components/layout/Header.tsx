@@ -557,7 +557,7 @@ export function Header({ onOpenAiAdvisor, onOpenDashboardHub }: HeaderProps) {
                       </button>
 
                       {/* Admin ERP link if user is admin */}
-                      {(activeUser?.role === 'admin' || activeUser?.role === 'superadmin') && (
+                      {(activeUser?.role === 'admin' || activeUser?.role === 'super_admin') && (
                         <div className="pt-1 mt-1 border-t border-amber-100 bg-amber-50/60 rounded-xl">
                           <button
                             type="button"
@@ -970,7 +970,7 @@ export function Header({ onOpenAiAdvisor, onOpenDashboardHub }: HeaderProps) {
                 </button>
 
                 {/* Admin ERP link if user is admin */}
-                {(activeUser?.role === 'admin' || activeUser?.role === 'superadmin') && (
+                {(activeUser?.role === 'admin' || activeUser?.role === 'super_admin') && (
                   <button
                     type="button"
                     onClick={() => {

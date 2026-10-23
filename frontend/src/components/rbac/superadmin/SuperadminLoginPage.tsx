@@ -37,47 +37,19 @@ export const SuperadminLoginPage: React.FC = () => {
     setLoading(true);
 
     try {
-      const res = await login(email.trim(), password, 'superadmin');
+      const res = await login(email.trim(), password, 'super_admin');
 
       if (res.success) {
         addToast('success', 'Welcome back, Superadmin Kalam!');
-        navigate('/superadmin/dashboard');
+        navigate('/super-admin');
       } else {
         setError(res.error || 'Invalid credentials. Please verify your email and password.');
       }
     } catch (err: any) {
-      if (email.trim().toLowerCase() === 'kalamchy88@gmail.com') {
-        const kalamUser = {
-          id: 'user-superadmin-kalam',
-          name: 'Kalam (Superadmin)',
-          email: 'kalamchy88@gmail.com',
-          role: 'superadmin' as const,
-          status: 'active' as const,
-          phone: '+977 9810448398',
-          department: 'Executive',
-          permissions: [
-            'products.view' as const, 'products.create' as const, 'products.edit' as const, 'products.delete' as const,
-            'orders.view' as const, 'orders.edit' as const, 'customers.view' as const, 'customers.edit' as const,
-            'reports.view' as const, 'admins.manage' as const, 'permissions.manage' as const, 'settings.manage' as const, 'audit_logs.view' as const
-          ],
-          createdAt: '2025-01-01T00:00:00.000Z',
-          lastLogin: new Date().toISOString(),
-        };
-        setSessionUser(kalamUser, `sess_demo_${Date.now()}`);
-        addToast('success', 'Welcome back, Superadmin Kalam!');
-        navigate('/superadmin/dashboard');
-      } else {
-        setError(err?.message || 'Server connection error. Please try again.');
-      }
+      setError(err?.message || 'Server connection error. Please try again.');
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleFillKalamDemo = () => {
-    setEmail('kalamchy88@gmail.com');
-    setPassword('Kalam@123');
-    setError(null);
   };
 
   return (
@@ -224,17 +196,8 @@ export const SuperadminLoginPage: React.FC = () => {
           </button>
         </div>
 
-        {/* Quick Credentials Auto-Fill for Kalam */}
-        <div className="mt-6 pt-3.5 border-t border-slate-200/80 flex items-center justify-between text-[11px] text-slate-500">
-          <button
-            type="button"
-            onClick={handleFillKalamDemo}
-            className="hover:text-[#0F766E] flex items-center gap-1 cursor-pointer font-medium transition-colors"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-[#0F766E]" />
-            <span>Fill Kalam credentials</span>
-          </button>
-
+        {/* Return to Storefront */}
+        <div className="mt-6 pt-3.5 border-t border-slate-200/80 flex items-center justify-end text-[11px] text-slate-500">
           <button
             type="button"
             onClick={() => navigate('/')}

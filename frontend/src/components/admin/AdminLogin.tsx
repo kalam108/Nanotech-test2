@@ -86,16 +86,15 @@ interface AdminLoginProps {
 }
 
 export function AdminLogin({ initialMode = 'signin' }: AdminLoginProps) {
-  const { loginAdmin, loginAdminDemo, logAdminAction } = useAdmin();
+  const { loginAdmin, logAdminAction } = useAdmin();
   const { setCurrentView, addToast, loginUser } = useApp();
   const { navigate: rbacNavigate } = useRBAC();
 
   // Mode: 'signin' | 'signup' | 'verify_otp'
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'verify_otp'>(initialMode);
 
-  // Sign In state (Matching Image 2: "Welcome Back" in teal)
-  const [email, setEmail] = useState('kalamchy88@gmail.com');
-  const [password, setPassword] = useState('Kalam@123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   // Sign Up state (Matching Image 1: "Admin Sign Up")
@@ -233,7 +232,6 @@ export function AdminLogin({ initialMode = 'signin' }: AdminLoginProps) {
             options: {
               data: {
                 full_name: signUpName.trim(),
-                role: 'admin',
                 phone: signUpPhone.trim(),
               },
             },
@@ -246,7 +244,6 @@ export function AdminLogin({ initialMode = 'signin' }: AdminLoginProps) {
               id: authData.user.id,
               email: signUpEmail.trim(),
               full_name: signUpName.trim(),
-              role: 'admin',
               phone: signUpPhone.trim(),
               status: 'active',
             });
@@ -319,13 +316,6 @@ export function AdminLogin({ initialMode = 'signin' }: AdminLoginProps) {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  // Quick fill helper for demo testing
-  const handleFillDemo = () => {
-    setEmail('kalamchy88@gmail.com');
-    setPassword('Admin@12345');
-    setErrorMsg(null);
   };
 
   // =========================================================================
@@ -446,47 +436,19 @@ export function AdminLogin({ initialMode = 'signin' }: AdminLoginProps) {
             </button>
           </div>
 
-          {/* Quick Demo Credentials Helper */}
-          <div className="mt-5 pt-3.5 border-t border-slate-100 space-y-2">
+          {/* Return to Storefront */}
+          <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-end text-[11px] text-slate-400">
             <button
               type="button"
-              onClick={async () => {
-                setEmail('kalamchy88@gmail.com');
-                setPassword('Admin@12345');
-                setIsLoading(true);
-                const res = await loginAdmin('kalamchy88@gmail.com', 'Admin@12345');
-                setIsLoading(false);
-                if (res.success) {
-                  setCurrentView('admin_dashboard');
-                  rbacNavigate('/admin');
-                }
+              onClick={() => {
+                setCurrentView('home');
+                rbacNavigate('/');
               }}
-              className="w-full py-2 px-3 rounded-lg bg-teal-50 hover:bg-teal-100 border border-teal-200 text-[#0F766E] text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+              className="hover:text-slate-600 flex items-center gap-1 cursor-pointer"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>1-Click Instant Login (Superadmin)</span>
+              <Store className="w-3 h-3" />
+              <span>Storefront</span>
             </button>
-
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <button
-                type="button"
-                onClick={handleFillDemo}
-                className="hover:text-slate-600 underline cursor-pointer"
-              >
-                Auto-fill credentials
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setCurrentView('home');
-                  rbacNavigate('/');
-                }}
-                className="hover:text-slate-600 flex items-center gap-1 cursor-pointer"
-              >
-                <Store className="w-3 h-3" />
-                <span>Storefront</span>
-              </button>
-            </div>
           </div>
         </div>
       </div>

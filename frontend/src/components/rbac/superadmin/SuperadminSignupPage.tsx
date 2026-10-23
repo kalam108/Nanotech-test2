@@ -8,16 +8,16 @@ export const SuperadminSignupPage: React.FC = () => {
   const { addToast } = useApp();
 
   // Form State matching Image exactly
-  const [firstName, setFirstName] = useState('Krishn');
+  const [firstName, setFirstName] = useState('');
   const [middleName, setMiddleName] = useState('');
-  const [lastName, setLastName] = useState('Chy');
-  const [email, setEmail] = useState('kalamchy88@gmail.com');
+  const [lastName, setLastName] = useState('');
+  const [email, setEmail] = useState('');
   const [phonePrefix, setPhonePrefix] = useState('+977');
-  const [phoneNumber, setPhoneNumber] = useState('9852055346');
-  const [password, setPassword] = useState('Kalam@123');
-  const [confirmPassword, setConfirmPassword] = useState('Kalam@123');
-  const [invitationCode, setInvitationCode] = useState('Kalam@Root2026');
-  const [agreeTerms, setAgreeTerms] = useState(true);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [invitationCode, setInvitationCode] = useState('');
+  const [agreeTerms, setAgreeTerms] = useState(false);
 
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -395,15 +395,12 @@ export const SuperadminSignupPage: React.FC = () => {
                   <label className="text-xs font-semibold text-slate-700 block">
                     Invitation Code
                   </label>
-                  <span className="text-[10px] text-teal-700 font-mono">
-                    Code: Kalam@Root2026
-                  </span>
                 </div>
                 <input
                   type="text"
                   value={invitationCode}
                   onChange={(e) => setInvitationCode(e.target.value)}
-                  placeholder="Kalam@Root2026"
+                  placeholder="Enter invitation code"
                   className="w-full px-3.5 py-2.5 rounded-lg border border-slate-200 text-teal-800 font-mono text-xs sm:text-sm focus:outline-none focus:border-[#0F766E] bg-white"
                 />
               </div>

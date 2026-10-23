@@ -2,7 +2,7 @@
 -- NanoTech Multi-Vendor Marketplace & Enterprise ERP Database
 -- Project ID: zovjbvddiimvxragxxni
 -- Supabase URL: https://zovjbvddiimvxragxxni.supabase.co
--- Super Admin: nenotech108@gmail.com
+-- Super Admin: ntsolution68@gmail.com
 -- ==============================================================================
 -- Run this in your Supabase SQL Editor:
 -- https://supabase.com/dashboard/project/zovjbvddiimvxragxxni/sql/new
@@ -340,12 +340,12 @@ BEGIN
     NEW.id,
     NEW.email,
     COALESCE(NEW.raw_user_meta_data->>'full_name', split_part(NEW.email, '@', 1)),
-    CASE WHEN LOWER(NEW.email) = 'nenotech108@gmail.com' THEN 'admin' ELSE COALESCE(NEW.raw_user_meta_data->>'role', 'customer') END,
+    CASE WHEN LOWER(NEW.email) = 'ntsolution68@gmail.com' THEN 'admin' ELSE COALESCE(NEW.raw_user_meta_data->>'role', 'customer') END,
     'active'
   )
   ON CONFLICT (id) DO UPDATE
   SET email = EXCLUDED.email,
-      role = CASE WHEN LOWER(EXCLUDED.email) = 'nenotech108@gmail.com' THEN 'admin' ELSE public.profiles.role END;
+      role = CASE WHEN LOWER(EXCLUDED.email) = 'ntsolution68@gmail.com' THEN 'admin' ELSE public.profiles.role END;
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
@@ -445,14 +445,14 @@ CREATE POLICY "All Access System Settings" ON public.system_settings FOR ALL USI
 -- ==============================================================================
 INSERT INTO public.profiles (id, email, full_name, role, phone, status)
 VALUES
-  ('user-super-admin-01', 'nenotech108@gmail.com', 'NanoTech Super Admin', 'admin', '+1 (800) 555-0199', 'active'),
+  ('user-super-admin-01', 'ntsolution68@gmail.com', 'NanoTech Super Admin', 'admin', '+1 (800) 555-0199', 'active'),
   ('user-seller-1', 'contact@apextech.com', 'Apex Tech Solutions', 'seller', '+1 (555) 234-5678', 'active'),
   ('user-seller-2', 'sales@cyberbyte.io', 'CyberByte Refurbished', 'seller', '+1 (555) 876-5432', 'active'),
   ('user-customer-1', 'alex.rivera@example.com', 'Alex Rivera', 'customer', '+1 (555) 998-1122', 'active')
 ON CONFLICT (id) DO UPDATE SET email = EXCLUDED.email, role = EXCLUDED.role;
 
 -- Ensure Super Admin email always has admin role
-UPDATE public.profiles SET role = 'admin' WHERE LOWER(email) = LOWER('nenotech108@gmail.com');
+UPDATE public.profiles SET role = 'admin' WHERE LOWER(email) = LOWER('ntsolution68@gmail.com');
 
 -- ==============================================================================
 -- 16. SEED DATA STORE: HARDWARE SELLERS

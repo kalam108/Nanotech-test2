@@ -979,86 +979,54 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   };
 
   const loginAdmin = async (email: string, password?: string): Promise<{ success: boolean; error?: string }> => {
-    // 1. If Supabase is configured and live auth is requested:
-    if (isSupabaseConfigured && email && password) {
-      try {
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-          console.warn('Supabase Auth error:', error.message);
-        } else if (data.user) {
-          const matchedUser = adminUsers.find((u) => u.email.toLowerCase() === email.toLowerCase()) || {
-            id: data.user.id,
-            name: data.user.user_metadata?.full_name || email.split('@')[0],
-            email: data.user.email || email,
-            role: 'admin' as AdminRole,
-            status: 'active' as const,
-            permissions: ['all'],
-            createdAt: data.user.created_at,
-          };
-          setCurrentAdmin(matchedUser);
-          logAdminAction('Supabase Login Successful', 'security', `Authenticated via Supabase Auth: ${email}`);
-          addToast('success', `Welcome back, ${matchedUser.name}`);
-          return { success: true };
-        }
-      } catch (err: any) {
-        console.warn('Supabase signIn catch error:', err);
-      }
+    if (!password) {
+      return { success: false, error: 'Password is required for authentication' };
     }
 
-    // 2. Local Credentials Check (kalamchy88@gmail.com / Admin@12345)
-    const normalizedEmail = email.trim().toLowerCase();
-    const found = adminUsers.find((u) => u.email.toLowerCase() === normalizedEmail) ||
-      INITIAL_ADMIN_USERS.find((u) => u.email.toLowerCase() === normalizedEmail);
-
-    const activeAdmin: AdminUser = found || {
-      id: `admin-${Date.now()}`,
-      name: email.split('@')[0].toUpperCase(),
-      email: email.trim(),
-      role: 'admin',
-      status: 'active',
-      permissions: ['all'],
-      createdAt: new Date().toISOString(),
-    };
-
-    setCurrentAdmin(activeAdmin);
     try {
-      localStorage.setItem('nanotech_admin_session', JSON.stringify(activeAdmin));
-      // Sync RBAC context session so route guards never bounce
-      const rbacUser = {
-        id: activeAdmin.id,
-        name: activeAdmin.name,
-        email: activeAdmin.email,
-        role: activeAdmin.role === 'super_admin' ? 'superadmin' : 'admin',
-        createdAt: activeAdmin.createdAt,
-      };
-      localStorage.setItem('nanotech_session_token', `admin_token_${Date.now()}`);
-      localStorage.setItem('nanotech_user', JSON.stringify(rbacUser));
-    } catch {}
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
+      if (error || !data.user) {
+        return { success: false, error: error?.message || 'Authentication failed' };
+      }
 
-    logAdminAction('Admin Session Login', 'security', `Authenticated admin user: ${activeAdmin.name}`);
-    addToast('success', `Welcome to NanoTech Command Center, ${activeAdmin.name}!`);
-    return { success: true };
+      const normEmail = (data.user.email || email).toLowerCase();
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role, status, full_name')
+        .eq('id', data.user.id)
+        .maybeSingle();
+
+      const r = String(profile?.role || '').toLowerCase().trim();
+      if (r !== 'admin' && r !== 'super_admin' && r !== 'superadmin') {
+        return { success: false, error: 'Access denied: Admin privileges required.' };
+      }
+      if (profile?.status && profile.status !== 'active') {
+        return { success: false, error: 'Account is not active.' };
+      }
+
+      const resolvedRole: AdminRole = (r === 'super_admin' || r === 'superadmin') ? 'super_admin' : 'admin';
+      const matchedUser: AdminUser = {
+        id: data.user.id,
+        name: profile?.full_name || data.user.user_metadata?.full_name || normEmail.split('@')[0],
+        email: normEmail,
+        role: resolvedRole,
+        status: 'active' as const,
+        permissions: ['all'],
+        createdAt: data.user.created_at || new Date().toISOString(),
+      };
+      setCurrentAdmin(matchedUser);
+      if (data.session?.access_token) {
+        localStorage.setItem('nanotech_session_token', data.session.access_token);
+      }
+      logAdminAction('Supabase Login Successful', 'security', `Authenticated via Supabase Auth: ${normEmail}`);
+      addToast('success', `Welcome back, ${matchedUser.name}`);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Supabase authentication failed' };
+    }
   };
 
-  const loginAdminDemo = (role: AdminRole = 'super_admin') => {
-    const matched = adminUsers.find((u) => u.role === role) || INITIAL_ADMIN_USERS[0];
-    const session = { ...matched, lastLogin: new Date().toISOString() };
-    setCurrentAdmin(session);
-    try {
-      localStorage.setItem('nanotech_admin_session', JSON.stringify(session));
-      const rbacUser = {
-        id: session.id,
-        name: session.name,
-        email: session.email,
-        role: session.role === 'super_admin' ? 'superadmin' : 'admin',
-        createdAt: session.createdAt,
-      };
-      localStorage.setItem('nanotech_session_token', `admin_token_${Date.now()}`);
-      localStorage.setItem('nanotech_user', JSON.stringify(rbacUser));
-    } catch {}
-    logAdminAction('Quick Demo Login', 'security', `Switched to demo role: ${role.toUpperCase()}`);
-    addToast('info', `Switched to Demo Session: ${matched.name} (${role.toUpperCase()})`);
-  };
+  const loginAdminDemo = () => {};
 
   const logoutAdmin = () => {
     logAdminAction('Admin Logout', 'security', `Admin ${currentAdmin?.name || ''} signed out`);

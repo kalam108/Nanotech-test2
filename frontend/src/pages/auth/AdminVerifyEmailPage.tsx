@@ -118,7 +118,7 @@ export function AdminVerifyEmailPage({ initialEmail, onNavigate }: AdminVerifyEm
           localStorage.removeItem('nanotech_pending_admin_reg');
         } catch {}
       } else {
-        await loginAdmin(email, 'Admin@12345');
+        await loginAdmin(email);
       }
 
       setTimeout(() => {

@@ -1,193 +1,185 @@
 import { Router } from 'express';
-import { AuthenticatedRequest, ServerUser } from '../types';
-import { USERS, SESSIONS, AUDIT_LOGS, addAuditLog, generateToken } from '../store';
+import { AuthenticatedRequest } from '../types';
+import { SERVER_PRODUCTS, SERVER_ORDERS, AUDIT_LOGS, addAuditLog } from '../store';
 import { requireRole } from '../middleware/auth';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
 
 const router = Router();
+
+// Protect ALL /api/admin routes: requires 'admin' or 'superadmin'
+router.use(requireRole(['admin', 'superadmin', 'super_admin']));
 
 // -------------------------------------------------------------
 // ADMIN OVERVIEW (admin, superadmin)
 // -------------------------------------------------------------
-router.get('/overview', requireRole(['admin', 'superadmin']), (_req, res) => {
+router.get('/overview', async (_req, res) => {
+  let totalCustomers = 0;
+  try {
+    const { count } = await supabaseAdmin
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'customer');
+    totalCustomers = count || 0;
+  } catch {
+    totalCustomers = 0;
+  }
+
   return res.json({
-    totalProducts: 48,
-    activeOrders: 14,
-    totalCustomers: USERS.filter((u) => u.role === 'customer').length,
+    totalProducts: SERVER_PRODUCTS.length,
+    activeOrders: SERVER_ORDERS.filter((o) => o.status === 'processing' || o.status === 'pending').length,
+    totalCustomers,
     revenueMonthNPR: 1485000,
-    lowStockAlerts: 3,
-    recentOrders: [
-      { id: 'ORD-9021', customer: 'Sita Sharma', totalNPR: 185000, status: 'Processing', date: '2026-09-02' },
-      { id: 'ORD-9022', customer: 'Bikram Thapa', totalNPR: 42000, status: 'Shipped', date: '2026-09-01' },
-    ],
+    lowStockAlerts: SERVER_PRODUCTS.filter((p) => (p.stock || 0) <= 3).length,
+    recentOrders: SERVER_ORDERS.slice(0, 5),
   });
 });
 
 // -------------------------------------------------------------
-// SUPERADMIN ROUTES (Strictly superadmin)
+// SUPERADMIN ROUTES (Strictly superadmin only)
 // -------------------------------------------------------------
 export const superAdminRouter = Router();
 
-// Public Superadmin Login Endpoint
-superAdminRouter.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required' });
+// Protect ALL /api/superadmin routes: requires 'superadmin' only
+superAdminRouter.use(requireRole(['superadmin', 'super_admin']));
+
+superAdminRouter.get('/overview', async (_req, res) => {
+  let totalAdmins = 0;
+  let totalCustomers = 0;
+
+  try {
+    const { count: adminCount } = await supabaseAdmin
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .in('role', ['admin', 'super_admin', 'superadmin']);
+    totalAdmins = adminCount || 0;
+
+    const { count: customerCount } = await supabaseAdmin
+      .from('profiles')
+      .select('*', { count: 'exact', head: true })
+      .eq('role', 'customer');
+    totalCustomers = customerCount || 0;
+  } catch {
+    // fallback
   }
 
-  const normEmail = email.trim().toLowerCase();
-  const isSuperadminEmail = ['kalamchy88@gmail.com'].includes(normEmail);
-  const user = USERS.find((u) => u.email.toLowerCase() === normEmail);
-
-  if (!user && isSuperadminEmail) {
-    const autoSuperadmin: ServerUser = {
-      id: `user-superadmin-${Date.now()}`,
-      name: 'Kalam (Superadmin)',
-      email: normEmail,
-      passwordHash: password,
-      role: 'superadmin',
-      status: 'active',
-      phone: '+977 9852055346',
-      department: 'Executive Board',
-      permissions: [
-        'products.view',
-        'products.create',
-        'products.edit',
-        'products.delete',
-        'orders.view',
-        'orders.edit',
-        'customers.view',
-        'customers.edit',
-        'reports.view',
-        'admins.manage',
-        'permissions.manage',
-        'settings.manage',
-        'audit_logs.view',
-      ],
-      createdAt: new Date().toISOString(),
-      lastLogin: new Date().toISOString(),
-    };
-    USERS.push(autoSuperadmin);
-    const token = generateToken(autoSuperadmin);
-    addAuditLog(autoSuperadmin, 'SUPERADMIN_LOGIN', '/api/superadmin/login', 'Kalam logged into Superadmin console');
-    return res.json({ success: true, token, user: autoSuperadmin });
-  }
-
-  if (!user || user.role !== 'superadmin') {
-    return res.status(403).json({ error: 'Access Denied: Superadmin privileges required.' });
-  }
-
-  const isKalam = ['kalamchy88@gmail.com'].includes(normEmail);
-  if (user.passwordHash !== password && !isKalam) {
-    return res.status(401).json({ error: 'Invalid superadmin credentials' });
-  }
-
-  if (user.status === 'disabled') {
-    return res.status(403).json({ error: 'This superadmin account is disabled.' });
-  }
-
-  user.lastLogin = new Date().toISOString();
-  const token = generateToken(user);
-  addAuditLog(user, 'SUPERADMIN_LOGIN', '/api/superadmin/login', 'Superadmin logged in successfully.');
-  return res.json({ success: true, token, user });
-});
-
-superAdminRouter.get('/overview', requireRole(['superadmin']), (_req, res) => {
   return res.json({
-    systemMaster: 'Kalam — Superadmin',
-    totalAdmins: USERS.filter((u) => u.role === 'admin').length,
-    totalCustomers: USERS.filter((u) => u.role === 'customer').length,
-    activeSessions: SESSIONS.size,
+    systemMaster: 'Superadmin Console',
+    totalAdmins,
+    totalCustomers,
     totalAuditLogs: AUDIT_LOGS.length,
-    securityStatus: 'Enforced (RBAC Active)',
+    securityStatus: 'Enforced (Supabase RBAC Active)',
     serverUptime: process.uptime(),
     nodeVersion: process.version,
   });
 });
 
-superAdminRouter.get('/admins', requireRole(['superadmin']), (_req, res) => {
-  const admins = USERS.filter((u) => u.role === 'admin').map((u) => ({
-    id: u.id,
-    name: u.name,
-    email: u.email,
-    role: u.role,
-    status: u.status,
-    phone: u.phone,
-    department: u.department,
-    permissions: u.permissions,
-    createdAt: u.createdAt,
-    lastLogin: u.lastLogin,
-  }));
-  return res.json({ admins });
+superAdminRouter.get('/admins', async (_req, res) => {
+  try {
+    const { data: admins, error } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .in('role', ['admin', 'super_admin', 'superadmin']);
+
+    if (error) {
+      return res.status(500).json({ error: error.message });
+    }
+    return res.json({ admins: admins || [] });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to fetch admins' });
+  }
 });
 
-superAdminRouter.post('/admins', requireRole(['superadmin']), (req: AuthenticatedRequest, res) => {
-  const { name, email, password, phone, department, permissions } = req.body;
+superAdminRouter.post('/admins', async (req: AuthenticatedRequest, res) => {
+  const { name, email, password, phone, department } = req.body;
 
   if (!name || !email || !password) {
     return res.status(400).json({ error: 'Name, email, and password are required' });
   }
 
-  const existing = USERS.find((u) => u.email.toLowerCase() === email.toLowerCase());
-  if (existing) {
-    return res.status(409).json({ error: 'A user with this email already exists' });
-  }
+  try {
+    const { data: authData, error: authErr } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: name, phone: phone || '' },
+    });
 
-  const newAdmin: ServerUser = {
-    id: `user-admin-${Date.now()}`,
-    name,
-    email,
-    passwordHash: password,
-    role: 'admin',
-    status: 'active',
-    phone: phone || '',
-    department: department || 'General Admin',
-    permissions: permissions || ['products.view', 'products.edit', 'orders.view'],
-    createdAt: new Date().toISOString(),
-    lastLogin: undefined,
-  };
-
-  USERS.push(newAdmin);
-
-  addAuditLog(
-    req.user!,
-    'ADMIN_CREATED',
-    newAdmin.email,
-    `Superadmin created new Admin account "${newAdmin.name}" with ${newAdmin.permissions.length} permissions.`
-  );
-
-  return res.status(201).json({ success: true, admin: newAdmin });
-});
-
-superAdminRouter.patch('/admins/:id/toggle-status', requireRole(['superadmin']), (req: AuthenticatedRequest, res) => {
-  const { id } = req.params;
-  const admin = USERS.find((u) => u.id === id && u.role === 'admin');
-
-  if (!admin) {
-    return res.status(404).json({ error: 'Admin account not found' });
-  }
-
-  admin.status = admin.status === 'active' ? 'disabled' : 'active';
-
-  // Invalidate active sessions if disabled
-  if (admin.status === 'disabled') {
-    for (const [token, user] of SESSIONS.entries()) {
-      if (user.id === admin.id) {
-        SESSIONS.delete(token);
-      }
+    if (authErr || !authData.user) {
+      return res.status(400).json({ error: authErr?.message || 'Failed to create admin in Supabase' });
     }
+
+    const { data: profile, error: profErr } = await supabaseAdmin
+      .from('profiles')
+      .upsert({
+        id: authData.user.id,
+        email,
+        full_name: name,
+        role: 'admin',
+        status: 'active',
+        phone: phone || null,
+        department: department || 'General Admin',
+        updated_at: new Date().toISOString(),
+      })
+      .select('*')
+      .single();
+
+    if (profErr) {
+      return res.status(400).json({ error: profErr.message });
+    }
+
+    addAuditLog(
+      req.user!,
+      'ADMIN_CREATED',
+      email,
+      `Superadmin created new Admin account "${name}" (${email})`
+    );
+
+    return res.status(201).json({ success: true, admin: profile });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Server error creating admin' });
   }
-
-  addAuditLog(
-    req.user!,
-    'ADMIN_STATUS_CHANGED',
-    admin.email,
-    `Superadmin changed Admin "${admin.name}" status to "${admin.status}".`
-  );
-
-  return res.json({ success: true, admin });
 });
 
-superAdminRouter.get('/audit-logs', requireRole(['superadmin']), (_req, res) => {
+superAdminRouter.patch('/admins/:id/toggle-status', async (req: AuthenticatedRequest, res) => {
+  const { id } = req.params;
+
+  try {
+    const { data: admin, error: fetchErr } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (fetchErr || !admin) {
+      return res.status(404).json({ error: 'Admin account not found' });
+    }
+
+    const nextStatus = admin.status === 'active' ? 'suspended' : 'active';
+    const { data: updated, error: updateErr } = await supabaseAdmin
+      .from('profiles')
+      .update({ status: nextStatus, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (updateErr) {
+      return res.status(400).json({ error: updateErr.message });
+    }
+
+    addAuditLog(
+      req.user!,
+      'ADMIN_STATUS_CHANGED',
+      admin.email,
+      `Superadmin changed Admin "${admin.full_name || admin.email}" status to "${nextStatus}".`
+    );
+
+    return res.json({ success: true, admin: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Failed to update admin status' });
+  }
+});
+
+superAdminRouter.get('/audit-logs', (_req, res) => {
   return res.json({ logs: AUDIT_LOGS });
 });
 

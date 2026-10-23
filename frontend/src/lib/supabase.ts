@@ -40,12 +40,8 @@ export const supabase: SupabaseClient = createClient(supabaseUrl, supabaseAnonKe
   },
 });
 
-// Helper to determine role, checking if email matches super admin
-export function resolveUserRole(email: string, requestedRole?: UserRole): UserRole {
-  const norm = email.trim().toLowerCase();
-  if (SUPER_ADMIN_EMAILS.some((adminEmail) => adminEmail.toLowerCase() === norm)) {
-    return 'admin';
-  }
+// Helper to determine role
+export function resolveUserRole(_email?: string, requestedRole?: UserRole): UserRole {
   return requestedRole || 'customer';
 }
 
@@ -253,7 +249,6 @@ export async function signUpWithSupabase(
       options: {
         data: {
           full_name: metadata.fullName,
-          role: finalRole,
           phone: metadata.phone || '',
           store_name: metadata.storeName || `${metadata.fullName} Tech Store`,
         },
@@ -348,7 +343,7 @@ export async function signInWithSupabase(email: string, password: string) {
           name: profileData.full_name || profileData.name || metaFullName || 'Customer',
           email: profileData.email || email,
           phone: profileData.phone || meta.phone,
-          role: resolveUserRole(email, profileData.role || userRole),
+          role: (profileData.role as UserRole) || 'customer',
           status: profileData.status || 'active',
           avatarUrl: profileData.avatar_url,
           createdAt: profileData.created_at || authUser.created_at,
@@ -593,7 +588,6 @@ export async function saveUserProfileToSupabase(user: User, seller?: SellerProfi
         id: user.id,
         email: user.email,
         full_name: user.name,
-        role: user.role,
         phone: user.phone || null,
         status: user.status,
         avatar_url: user.avatarUrl || null,

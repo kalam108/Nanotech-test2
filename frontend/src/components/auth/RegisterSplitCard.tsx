@@ -171,7 +171,6 @@ export function RegisterSplitCard({
             full_name: fullName,
             name: fullName,
             phone: fullPhone || undefined,
-            role: 'customer',
           },
         });
       } catch (otpErr: any) {

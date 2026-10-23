@@ -27,7 +27,7 @@ interface LiveDashboardHubModalProps {
 }
 
 export function LiveDashboardHubModal({ isOpen, onClose }: LiveDashboardHubModalProps) {
-  const { role, currentUser, quickLoginAs, navigate: rbacNavigate, logout } = useRBAC();
+  const { role, currentUser, navigate: rbacNavigate, logout } = useRBAC();
   const { setCurrentView, addToast } = useApp();
   const { setAdminSubView } = useAdmin();
   const { serverOnline, serverLatency, openDiagnosticsModal } = useServer();
@@ -39,15 +39,11 @@ export function LiveDashboardHubModal({ isOpen, onClose }: LiveDashboardHubModal
     setSwitching(dashboardId);
     try {
       switch (dashboardId) {
-        case 'superadmin':
-          await quickLoginAs('superadmin');
-          rbacNavigate('/superadmin/dashboard');
-          addToast('success', 'Logged in as Superadmin Kalam — Root Console Active');
+        case 'super_admin':
+          rbacNavigate('/super-admin');
           break;
         case 'admin_portal':
-          await quickLoginAs('admin');
-          rbacNavigate('/admin/dashboard');
-          addToast('success', 'Logged in as Admin Raju Khadka — Operations Dashboard Active');
+          rbacNavigate('/admin');
           break;
         case 'admin_erp':
           setCurrentView('admin_dashboard');
@@ -59,9 +55,7 @@ export function LiveDashboardHubModal({ isOpen, onClose }: LiveDashboardHubModal
           addToast('info', 'Opened Seller / Vendor Marketplace Studio');
           break;
         case 'customer':
-          await quickLoginAs('customer');
-          rbacNavigate('/customer/dashboard');
-          addToast('success', 'Logged in as Customer Sita — Orders & Profile Active');
+          rbacNavigate('/dashboard');
           break;
         case 'price_tracker':
           rbacNavigate('/');
@@ -84,13 +78,13 @@ export function LiveDashboardHubModal({ isOpen, onClose }: LiveDashboardHubModal
 
   const dashboards = [
     {
-      id: 'superadmin',
+      id: 'super_admin',
       title: 'Superadmin Enterprise Console',
       badge: 'Root Authority',
       badgeColor: 'bg-amber-500/10 text-amber-600 border-amber-500/20',
       icon: Lock,
       iconColor: 'text-amber-600 bg-amber-500/10 border-amber-500/20',
-      route: '/superadmin/dashboard',
+      route: '/super-admin',
       role: 'Superadmin (Kalam)',
       description: 'Total control over administrative staff, user privilege tiers, security audit logs, system-wide lockdown, and global platform configuration.',
       features: ['Admin Accounts CRUD', 'Live Security Audit Logs', 'RBAC Permissions Matrix', 'Node/Server Telemetry'],
@@ -193,7 +187,7 @@ export function LiveDashboardHubModal({ isOpen, onClose }: LiveDashboardHubModal
           </div>
           <div className="flex items-center flex-wrap gap-2">
             <button
-              onClick={() => handleLaunchDashboard('superadmin')}
+              onClick={() => handleLaunchDashboard('super_admin')}
               className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-300 hover:bg-amber-100 font-bold transition-all cursor-pointer flex items-center gap-1.5 shadow-2xs"
             >
               <Lock className="w-3 h-3 text-amber-600" />

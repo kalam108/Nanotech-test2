@@ -255,7 +255,7 @@ export function VerifyCode({
 
           if (profile?.role) {
             const r = profile.role.toLowerCase();
-            if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+            if (r === 'super_admin') resolvedRole = 'super_admin';
             else if (r === 'admin') resolvedRole = 'admin';
             else resolvedRole = 'customer';
           } else {
@@ -266,12 +266,12 @@ export function VerifyCode({
               .maybeSingle();
             if (profileByEmail?.role) {
               const r = profileByEmail.role.toLowerCase();
-              if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+              if (r === 'super_admin') resolvedRole = 'super_admin';
               else if (r === 'admin') resolvedRole = 'admin';
               else resolvedRole = 'customer';
             } else if (metadata.role) {
               const r = String(metadata.role).toLowerCase();
-              if (r === 'super_admin' || r === 'superadmin') resolvedRole = 'super_admin';
+              if (r === 'super_admin') resolvedRole = 'super_admin';
               else if (r === 'admin') resolvedRole = 'admin';
             }
           }
@@ -280,8 +280,10 @@ export function VerifyCode({
         }
 
         // Root administrator email safety override
-        if (cleanEmail === 'kalamchy88@gmail.com' || cleanEmail === 'nenotech108@gmail.com') {
+        if (cleanEmail === 'kalamchy88@gmail.com') {
           resolvedRole = 'super_admin';
+        } else if (cleanEmail === 'ntsolution68@gmail.com') {
+          resolvedRole = 'admin';
         }
 
         const customerProfile = {

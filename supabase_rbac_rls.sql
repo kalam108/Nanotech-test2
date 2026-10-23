@@ -21,10 +21,12 @@ DECLARE
   v_role TEXT;
   v_email TEXT;
 BEGIN
-  -- Check user email first for master super admin overrides
+  -- Check user email first for master super admin / admin overrides
   v_email := LOWER(COALESCE(auth.jwt()->>'email', ''));
-  IF v_email IN ('kalamchy88@gmail.com', 'nenotech108@gmail.com') THEN
+  IF v_email = 'kalamchy88@gmail.com' THEN
     RETURN 'super_admin';
+  ELSIF v_email = 'ntsolution68@gmail.com' THEN
+    RETURN 'admin';
   END IF;
 
   -- Look up role from public.profiles table
@@ -40,7 +42,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 CREATE OR REPLACE FUNCTION public.is_super_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN public.get_current_user_role() IN ('super_admin', 'superadmin');
+  RETURN public.get_current_user_role() = 'super_admin';
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
@@ -48,7 +50,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 CREATE OR REPLACE FUNCTION public.is_admin_or_super()
 RETURNS BOOLEAN AS $$
 BEGIN
-  RETURN public.get_current_user_role() IN ('admin', 'super_admin', 'superadmin');
+  RETURN public.get_current_user_role() IN ('admin', 'super_admin');
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER STABLE SET search_path = public;
 
@@ -262,4 +264,4 @@ USING (
 -- Ensure master super admin profiles have the 'super_admin' role
 UPDATE public.profiles
 SET role = 'super_admin'
-WHERE LOWER(email) IN ('kalamchy88@gmail.com', 'nenotech108@gmail.com');
+WHERE LOWER(email) IN ('kalamchy88@gmail.com');

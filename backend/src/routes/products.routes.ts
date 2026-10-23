@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import { SERVER_PRODUCTS, SERVER_CATEGORIES } from '../store';
+import { requireRole } from '../middleware/auth';
 
 const router = Router();
 
-// Products Catalog List & Filter
+// Products Catalog List & Filter (Public)
 router.get('/', (req, res) => {
   const category = req.query.category as string;
   const condition = req.query.condition as string;
@@ -33,7 +34,7 @@ router.get('/', (req, res) => {
   });
 });
 
-// Single Product Details
+// Single Product Details (Public)
 router.get('/:id', (req, res) => {
   const product = SERVER_PRODUCTS.find((p) => p.id === req.params.id);
   if (!product) {
@@ -42,8 +43,8 @@ router.get('/:id', (req, res) => {
   res.json({ success: true, product });
 });
 
-// Create Product
-router.post('/', (req, res) => {
+// Create Product (Needs 'admin' or 'superadmin')
+router.post('/', requireRole(['admin', 'superadmin', 'super_admin']), (req, res) => {
   const newProd = {
     id: req.body.id || `prod-${Date.now()}`,
     ...req.body,
@@ -54,8 +55,8 @@ router.post('/', (req, res) => {
   res.status(201).json({ success: true, product: newProd });
 });
 
-// Update Product
-router.put('/:id', (req, res) => {
+// Update Product (Needs 'admin' or 'superadmin')
+router.put('/:id', requireRole(['admin', 'superadmin', 'super_admin']), (req, res) => {
   const idx = SERVER_PRODUCTS.findIndex((p) => p.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Product not found' });
@@ -64,8 +65,8 @@ router.put('/:id', (req, res) => {
   res.json({ success: true, product: SERVER_PRODUCTS[idx] });
 });
 
-// Delete Product
-router.delete('/:id', (req, res) => {
+// Delete Product (Needs 'admin' or 'superadmin')
+router.delete('/:id', requireRole(['admin', 'superadmin', 'super_admin']), (req, res) => {
   const idx = SERVER_PRODUCTS.findIndex((p) => p.id === req.params.id);
   if (idx === -1) {
     return res.status(404).json({ error: 'Product not found' });
@@ -74,7 +75,7 @@ router.delete('/:id', (req, res) => {
   res.json({ success: true, deletedId: req.params.id, product: deleted });
 });
 
-// Categories router
+// Categories router (Public)
 export const categoriesRouter = Router();
 
 categoriesRouter.get('/', (_req, res) => {

@@ -5,6 +5,15 @@
     "moduleResolution": "bundler",
     "skipLibCheck": true,
     "allowJs": true,
-    "isolatedModules": true
-  }
+    "isolatedModules": true,
+    "noEmit": true
+  },
+  "exclude": [
+    "node_modules",
+    "**/node_modules",
+    "dist",
+    "**/dist",
+    "backend",
+    "frontend"
+  ]
 }

@@ -59,7 +59,7 @@ export const AppRouter: React.FC<{ children: React.ReactNode }> = ({ children })
 
   if (isSuperadminHost) {
     if (path === '/' || path === '/login') {
-      if (isAuthenticated && role === 'superadmin') {
+      if (isAuthenticated && role === 'super_admin') {
         return (
           <SuperadminLayout>
             <SuperadminDashboardView />
@@ -123,27 +123,16 @@ export const AppRouter: React.FC<{ children: React.ReactNode }> = ({ children })
   }
 
   // 2. SUPERADMIN ROUTES (/super-admin and /superadmin)
-  if (path === '/super-admin' || path.startsWith('/super-admin') || path.startsWith('/superadmin')) {
-    const storedAdmin = typeof window !== 'undefined' ? localStorage.getItem('nanotech_admin_session') : null;
-    let storedRole = null;
-    if (storedAdmin) {
-      try {
-        storedRole = JSON.parse(storedAdmin)?.role;
-      } catch {}
+  if (path === '/super-admin' || path.startsWith('/super-admin') || path === '/superadmin' || path.startsWith('/superadmin')) {
+    if (path === '/superadmin/signup' || path === '/super-admin/signup' || path === '/superadmin/register' || path === '/super-admin/register') {
+      return <SuperadminSignupPage />;
     }
-    const isSuperAdmin =
-      role === 'super_admin' ||
-      role === 'superadmin' ||
-      storedRole === 'super_admin' ||
-      storedRole === 'superadmin';
 
-    // Strictly redirect anyone else to the store homepage
+    const isSuperAdmin = role === 'super_admin';
+
+    // If not logged in as Superadmin, show the Superadmin Login page
     if (!isSuperAdmin) {
-      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
-        window.history.pushState({}, '', '/');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
-      return null;
+      return <SuperadminLoginPage />;
     }
 
     // Role-protected Superadmin Console
@@ -187,27 +176,11 @@ export const AppRouter: React.FC<{ children: React.ReactNode }> = ({ children })
 
   // 3. ADMIN ROUTES (/admin)
   if (path === '/admin' || path.startsWith('/admin')) {
-    const storedAdmin = typeof window !== 'undefined' ? localStorage.getItem('nanotech_admin_session') : null;
-    let storedRole = null;
-    if (storedAdmin) {
-      try {
-        storedRole = JSON.parse(storedAdmin)?.role;
-      } catch {}
-    }
-    const isSuperAdmin =
-      role === 'super_admin' ||
-      role === 'superadmin' ||
-      storedRole === 'super_admin' ||
-      storedRole === 'superadmin';
-    const isAdmin = role === 'admin' || isSuperAdmin || storedRole === 'admin';
+    const isAdmin = role === 'admin' || role === 'super_admin';
 
-    // Strictly redirect anyone else to the store homepage
+    // If not logged in as Admin, show the Admin Authentication portal
     if (!isAdmin) {
-      if (typeof window !== 'undefined' && window.location.pathname !== '/') {
-        window.history.pushState({}, '', '/');
-        window.dispatchEvent(new PopStateEvent('popstate'));
-      }
-      return null;
+      return <AdminLogin />;
     }
 
     // Full Enterprise Admin Dashboard Console with Master Sections

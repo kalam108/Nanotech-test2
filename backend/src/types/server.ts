@@ -1,6 +1,6 @@
 import { Request } from 'express';
 
-export type ServerRole = 'customer' | 'admin' | 'superadmin';
+export type ServerRole = 'customer' | 'admin' | 'super_admin';
 
 export interface ServerUser {
   id: string;
