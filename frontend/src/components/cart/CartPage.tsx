@@ -30,8 +30,32 @@ export function CartPage() {
     openCheckoutModalWithPayment,
   } = useApp();
 
+  const [storeSettings, setStoreSettings] = React.useState<{ delivery_fee: number; free_delivery_above: number }>({
+    delivery_fee: 150,
+    free_delivery_above: 5000,
+  });
+
+  React.useEffect(() => {
+    let isMounted = true;
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (!isMounted) return;
+        const fee = data?.delivery_fee ?? data?.settings?.delivery_fee;
+        const freeAbove = data?.free_delivery_above ?? data?.settings?.free_delivery_above;
+        setStoreSettings({
+          delivery_fee: typeof fee === 'number' ? fee : Number(fee) || 150,
+          free_delivery_above: typeof freeAbove === 'number' ? freeAbove : Number(freeAbove) || 5000,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const deliveryFee = subtotal > 200 || cart.length === 0 ? 0 : 15;
+  const deliveryFee = cart.length === 0 || subtotal >= storeSettings.free_delivery_above ? 0 : storeSettings.delivery_fee;
   const total = subtotal + deliveryFee;
 
   return (
@@ -153,9 +177,12 @@ export function CartPage() {
                     {deliveryFee === 0 ? <span className="text-emerald-700 font-extrabold">FREE</span> : formatPricePrimary(deliveryFee)}
                   </span>
                 </div>
-                {deliveryFee > 0 && (
+                <div className="text-[11px] text-slate-500">
+                  Free delivery above NPR {storeSettings.free_delivery_above}
+                </div>
+                {deliveryFee > 0 && subtotal < storeSettings.free_delivery_above && (
                   <p className="text-[11px] text-amber-700 bg-amber-50 p-2.5 rounded-xl border border-amber-200">
-                    Add {formatPricePrimary(200 - subtotal)} more for FREE shipping!
+                    Add {formatPricePrimary(storeSettings.free_delivery_above - subtotal)} more for FREE shipping!
                   </p>
                 )}
                 <div className="pt-3.5 border-t border-slate-100 flex justify-between items-baseline text-lg font-black text-slate-900">

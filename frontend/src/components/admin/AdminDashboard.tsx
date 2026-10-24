@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useState } from 'react';
 import { useAdmin } from '../../context/AdminContext';
 import { AdminLogin } from './AdminLogin';
@@ -6,31 +8,16 @@ import { AdminSidebar } from './AdminSidebar';
 import { AdminGlobalSearchModal } from './AdminGlobalSearchModal';
 import { AdminNotificationDrawer } from './AdminNotificationDrawer';
 
-// Dynamic Sub-views
+// The 9 Active Admin Sub-views
 import { DashboardOverviewSection } from './sections/DashboardOverviewSection';
-import { AnalyticsSection } from './sections/AnalyticsSection';
-import { ReportsSection } from './sections/ReportsSection';
 import { ProductsMasterSection } from './sections/ProductsMasterSection';
 import { CategoriesSection } from './sections/CategoriesSection';
-import { InventorySection } from './sections/InventorySection';
-import { BrandsSection } from './sections/BrandsSection';
-import { PCBuilderAdminSection } from './sections/PCBuilderAdminSection';
-import { PriceTrackerAdminSection } from './sections/PriceTrackerAdminSection';
-import { StoresAdminSection } from './sections/StoresAdminSection';
 import { OrdersSection } from './sections/OrdersSection';
 import { CustomersSection } from './sections/CustomersSection';
-import { SellersSection } from './sections/SellersSection';
-import { ReviewsSection } from './sections/ReviewsSection';
-import { AccountingSection } from './sections/AccountingSection';
-import { BudgetSection } from './sections/BudgetSection';
-import { ExcelCenterSection } from './sections/ExcelCenterSection';
-import { OnlineExcelWorkspace } from './accounting/OnlineExcelWorkspace';
-import { TallyAccountingWorkspace } from './accounting/TallyAccountingWorkspace';
-import { ContentManagementSection } from './sections/ContentManagementSection';
-import { UsersRolesSection } from './sections/UsersRolesSection';
+import { ReportsSection } from './sections/ReportsSection';
+import { BannersSection } from './sections/BannersSection';
+import { OffersDiscountsSection } from './sections/OffersDiscountsSection';
 import { AdminSettingsSection } from './sections/AdminSettingsSection';
-import { AuditLogsSection } from './sections/AuditLogsSection';
-import { BackupSection } from './sections/BackupSection';
 
 export function AdminDashboard() {
   const { currentAdmin, adminSubView } = useAdmin();
@@ -41,116 +28,44 @@ export function AdminDashboard() {
     return <AdminLogin />;
   }
 
+  // Exactly 9 sections in router
   const renderActiveSection = () => {
     switch (adminSubView) {
       case 'dashboard':
         return <DashboardOverviewSection />;
-      case 'analytics':
-        return <AnalyticsSection />;
-      case 'reports':
-      case 'reports_gen':
-        return <ReportsSection />;
       case 'products':
         return <ProductsMasterSection />;
       case 'categories':
         return <CategoriesSection />;
-      case 'inventory':
-        return <InventorySection />;
-      case 'brands':
-        return <BrandsSection />;
-      case 'pc_builder':
-        return <PCBuilderAdminSection />;
-      case 'price_tracker':
-        return <PriceTrackerAdminSection />;
-      case 'stores':
-        return <StoresAdminSection />;
       case 'orders':
         return <OrdersSection />;
       case 'customers':
         return <CustomersSection />;
-      case 'sellers':
-        return <SellersSection />;
-      case 'reviews':
-      case 'reviews_reports':
-        return <ReviewsSection />;
-      case 'excel_sheets':
-      case 'accounting_excel':
-        return <OnlineExcelWorkspace />;
-      case 'tally_accounting':
-      case 'accounting_dashboard':
-      case 'tally_ledger':
-      case 'accounting_sales':
-      case 'accounting_purchases':
-      case 'accounting_payments':
-      case 'accounting_receipts':
-      case 'accounting_reports':
-        return <TallyAccountingWorkspace />;
-      case 'revenue':
-      case 'expenses':
-      case 'transactions':
-      case 'accounting':
-      case 'accounting_income':
-        return <AccountingSection />;
-      case 'budget':
-        return <BudgetSection />;
-      case 'excel':
-      case 'import_excel':
-      case 'export_download':
-        return <ExcelCenterSection />;
-      case 'header_menu':
-      case 'left_menu':
+      case 'reports':
+      case 'reports_gen':
+        return <ReportsSection />;
       case 'banners':
+        return <BannersSection />;
       case 'offers':
-      case 'pages':
-      case 'content':
-      case 'website_content':
-        return <ContentManagementSection />;
-      case 'users_roles':
-      case 'admin_users':
-        if (currentAdmin?.role !== 'super_admin') {
-          return (
-            <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">
-              <h3 className="text-base font-bold text-slate-900">Access Restricted: Super Admin Only</h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Admin accounts cannot change user roles, create super admins, or manage system permissions.
-              </p>
-            </div>
-          );
-        }
-        return <UsersRolesSection />;
+        return <OffersDiscountsSection />;
       case 'settings':
-        if (currentAdmin?.role !== 'super_admin') {
-          return (
-            <div className="bg-white rounded-2xl p-8 border border-slate-200 text-center space-y-3">
-              <h3 className="text-base font-bold text-slate-900">Access Restricted: Super Admin Only</h3>
-              <p className="text-xs text-slate-500 max-w-md mx-auto">
-                Only the super_admin is authorized to modify store and platform settings.
-              </p>
-            </div>
-          );
-        }
         return <AdminSettingsSection />;
-      case 'activity_logs':
-      case 'audit_logs':
-        return <AuditLogsSection />;
-      case 'backup':
-        return <BackupSection />;
       default:
         return <DashboardOverviewSection />;
     }
   };
 
   return (
-    <div className="h-screen overflow-hidden bg-white text-slate-900 flex flex-col font-sans antialiased selection:bg-indigo-600 selection:text-white relative">
+    <div className="h-screen overflow-hidden bg-white text-slate-900 flex flex-col font-poppins antialiased selection:bg-[#0F766E] selection:text-white relative">
       {/* Top App Header - Fixed Top Bar */}
       <AdminHeader />
 
-      {/* Main Workspace with Fixed Left Sidebar & Scrolling Right Content */}
+      {/* Main Workspace with Left Sidebar & Scrolling Right Content */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative bg-white">
-        {/* Left Control Sidebar - Fixed in place */}
+        {/* Left Control Sidebar - 9 items & Account Menu */}
         <AdminSidebar />
 
-        {/* Dynamic Content Panel - ONLY the right part scrolls */}
+        {/* Dynamic Content Panel - Right part scrolls */}
         <main
           id="admin-main-scroll-container"
           className="flex-1 h-full overflow-y-auto min-w-0 p-4 sm:p-6 lg:p-7 bg-[#f8fafc]/80 scrollbar-thin scrollbar-thumb-slate-300 hover:scrollbar-thumb-slate-400"

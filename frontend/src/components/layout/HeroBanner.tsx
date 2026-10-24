@@ -46,6 +46,22 @@ export function HeroBanner() {
   const [touchStart, setTouchStart] = useState<number | null>(null);
   const [touchEnd, setTouchEnd] = useState<number | null>(null);
   const slideContainerRef = useRef<HTMLDivElement>(null);
+  const [activeBanners, setActiveBanners] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/banners')
+      .then((res) => res.json())
+      .then((data) => {
+        if (isMounted && data.success && Array.isArray(data.banners) && data.banners.length > 0) {
+          setActiveBanners(data.banners);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   // 5 exact slides corresponding to user's uploaded banner images
   const slidesData: BannerSlide[] = [
@@ -211,7 +227,67 @@ export function HeroBanner() {
 
   return (
     <section className="w-full max-w-[1440px] 2xl:max-w-[1560px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 pt-3 select-none">
-      {/* 260px Container (Increased by 130 from 130px) */}
+      {activeBanners.length > 0 ? (
+        <div
+          ref={slideContainerRef}
+          onMouseEnter={() => setIsPaused(true)}
+          onMouseLeave={() => setIsPaused(false)}
+          className="relative w-full h-[260px] rounded-2xl overflow-hidden shadow-xl border border-slate-200 group"
+        >
+          {(() => {
+            const banner = activeBanners[currentSlide % activeBanners.length];
+            return (
+              <a
+                href={banner.link || '#'}
+                className="w-full h-full block relative cursor-pointer"
+              >
+                <img
+                  src={banner.image_url}
+                  alt={banner.title}
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-slate-950/70 via-transparent to-transparent flex items-end p-6">
+                  <div className="text-white">
+                    <span className="text-xs bg-[#0F766E] text-white px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider mb-1 inline-block">
+                      Featured Promotion
+                    </span>
+                    <h2 className="text-lg sm:text-2xl font-bold tracking-tight">
+                      {banner.title}
+                    </h2>
+                  </div>
+                </div>
+              </a>
+            );
+          })()}
+
+          {/* Navigation Controls if multiple active banners */}
+          {activeBanners.length > 1 && (
+            <div className="absolute bottom-4 right-4 flex items-center gap-2 z-20">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentSlide((prev) => (prev - 1 + activeBanners.length) % activeBanners.length);
+                }}
+                className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setCurrentSlide((prev) => (prev + 1) % activeBanners.length);
+                }}
+                className="w-8 h-8 rounded-full bg-black/40 hover:bg-black/70 text-white flex items-center justify-center backdrop-blur-xs transition"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+      /* 260px Container (Increased by 130 from 130px) */
       <div
         ref={slideContainerRef}
         onMouseEnter={() => setIsPaused(true)}
@@ -468,6 +544,7 @@ export function HeroBanner() {
           })}
         </div>
       </div>
+      )}
     </section>
   );
 }

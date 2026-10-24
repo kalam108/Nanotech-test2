@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { AuthenticatedRequest } from '../types';
-import { SERVER_ORDERS, SERVER_PRODUCTS, addAuditLog } from '../store';
+import { SERVER_ORDERS, SERVER_PRODUCTS, SERVER_SETTINGS, SERVER_DISCOUNTS, addAuditLog } from '../store';
 import { requireAuth, requireRole } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabaseAdmin';
 
@@ -51,9 +51,82 @@ router.get('/:id', requireAuth, (req: AuthenticatedRequest, res) => {
   return res.json({ success: true, order });
 });
 
-// Place Order: Recalculate prices and total strictly on the server from product data
+// Helper to fetch store settings from Supabase or fallback
+async function getStoreSettings() {
+  let delivery_fee = Number(SERVER_SETTINGS.delivery_fee) || 150;
+  let free_delivery_above = Number(SERVER_SETTINGS.free_delivery_above) || 5000;
+  let low_stock_threshold = Number(SERVER_SETTINGS.low_stock_threshold) || 3;
+
+  try {
+    const { data } = await supabaseAdmin
+      .from('store_settings')
+      .select('delivery_fee, free_delivery_above, low_stock_threshold')
+      .eq('id', 'default')
+      .maybeSingle();
+    if (data) {
+      if (data.delivery_fee !== null && data.delivery_fee !== undefined) {
+        delivery_fee = Number(data.delivery_fee);
+      }
+      if (data.free_delivery_above !== null && data.free_delivery_above !== undefined) {
+        free_delivery_above = Number(data.free_delivery_above);
+      }
+      if (data.low_stock_threshold !== null && data.low_stock_threshold !== undefined) {
+        low_stock_threshold = Number(data.low_stock_threshold);
+      }
+    }
+  } catch {
+    // fallback
+  }
+  return {
+    delivery_fee,
+    free_delivery_above,
+    low_stock_threshold,
+  };
+}
+
+// Validate Discount endpoint (preview for client)
+router.post('/validate-discount', async (req, res) => {
+  const code = (req.body.code || req.body.couponCode || req.body.discountCode || '').trim();
+  if (!code) {
+    return res.status(400).json({ valid: false, error: 'Discount code is required' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('discounts')
+      .select('code, type, value, min_order_amount, start_date, end_date, usage_limit, used_count, is_active')
+      .ilike('code', code)
+      .maybeSingle();
+
+    if (error || !data || !data.is_active) {
+      return res.status(400).json({ valid: false, error: 'Invalid or expired discount code' });
+    }
+
+    const now = new Date();
+    if (data.start_date && new Date(data.start_date) > now) {
+      return res.status(400).json({ valid: false, error: 'Discount code is not active yet' });
+    }
+    if (data.end_date && new Date(data.end_date) < now) {
+      return res.status(400).json({ valid: false, error: 'Discount code has expired' });
+    }
+    if (data.usage_limit && (data.used_count || 0) >= data.usage_limit) {
+      return res.status(400).json({ valid: false, error: 'Discount code usage limit reached' });
+    }
+
+    return res.json({
+      valid: true,
+      type: data.type,
+      value: Number(data.value),
+      min_order_amount: Number(data.min_order_amount) || 0,
+    });
+  } catch {
+    return res.status(400).json({ valid: false, error: 'Invalid or expired discount code' });
+  }
+});
+
+// Place Order: Recalculate prices and total strictly on the server from product data, store_settings delivery fee, and server discounts
 router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
-  const { items, shippingAddress, paymentMethod, deliveryFee: rawDeliveryFee } = req.body;
+  const { items, shippingAddress, paymentMethod, couponCode, discountCode } = req.body;
 
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Order must contain at least one item' });
@@ -91,13 +164,22 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
       return res.status(400).json({ error: `Product not found: ${productId}` });
     }
 
+    const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
+
+    // Check stock availability
+    if (product.stock !== undefined && product.stock !== null && Number(product.stock) < quantity) {
+      return res.status(400).json({ error: `Insufficient stock for product: ${product.title || productId}` });
+    }
+    if (product.nepalStockStatus === 'out_of_stock') {
+      return res.status(400).json({ error: `Product is out of stock: ${product.title || productId}` });
+    }
+
     // Force server catalog price - NEVER trust the price sent by the client!
     const serverPrice = Number(product.price);
     if (isNaN(serverPrice) || serverPrice < 0) {
       return res.status(500).json({ error: `Invalid price configuration for product: ${productId}` });
     }
 
-    const quantity = Math.max(1, Math.floor(Number(item.quantity) || 1));
     const itemTotal = serverPrice * quantity;
     subtotal += itemTotal;
 
@@ -111,8 +193,39 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     });
   }
 
-  const deliveryFee = typeof rawDeliveryFee === 'number' && rawDeliveryFee >= 0 ? rawDeliveryFee : 0;
-  const total = subtotal + deliveryFee;
+  // 1. READ DELIVERY FEE STRICTLY FROM STORE_SETTINGS (subtotal >= free_delivery_above ? 0 : delivery_fee)
+  const settings = await getStoreSettings();
+  const deliveryFee = subtotal >= settings.free_delivery_above ? 0 : settings.delivery_fee;
+
+  // 2. ALL ORDER CHECKS PASSED: APPLY DISCOUNT RIGHT BEFORE SAVING ORDER
+  const rawCode = (couponCode || discountCode || '').trim();
+  let serverDiscountAmount = 0;
+  let appliedDiscountCode: string | null = null;
+
+  if (rawCode) {
+    const { data, error } = await supabaseAdmin.rpc('redeem_discount', {
+      p_code: rawCode,
+      p_order_amount: subtotal,
+    });
+
+    const row = Array.isArray(data) ? data[0] : data;
+
+    if (error || !row) {
+      return res.status(400).json({ error: 'Invalid or expired discount code' });
+    }
+
+    const discountType = row.discount_type;
+    const discountValue = Number(row.discount_value);
+
+    if (discountType === 'percent') {
+      serverDiscountAmount = Math.round((subtotal * discountValue) / 100);
+    } else {
+      serverDiscountAmount = Math.min(discountValue, subtotal);
+    }
+    appliedDiscountCode = rawCode.toUpperCase();
+  }
+
+  const total = Math.max(0, subtotal - serverDiscountAmount + deliveryFee);
 
   const buyerId = req.user!.id;
   const buyerName = shippingAddress?.fullName || req.user!.name;
@@ -126,6 +239,8 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
     items: recalculatedItems,
     subtotal,
     deliveryFee,
+    discountAmount: serverDiscountAmount,
+    discountCode: appliedDiscountCode,
     total,
     totalAmount: total,
     paymentMethod: paymentMethod || 'Cash on Delivery',
@@ -138,7 +253,7 @@ router.post('/', requireAuth, async (req: AuthenticatedRequest, res) => {
   };
 
   SERVER_ORDERS.unshift(newOrder);
-  addAuditLog(req.user || null, 'ORDER_CREATED', newOrder.id, `New order placed for NPR ${total}`);
+  addAuditLog(req.user || null, 'ORDER_CREATED', newOrder.id, `New order placed for NPR ${total} (Delivery: ${deliveryFee}, Discount: ${serverDiscountAmount})`);
 
   return res.status(201).json({ success: true, order: newOrder });
 });

@@ -200,7 +200,7 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     // 1. SUPERADMIN ROUTES PROTECTION (/super-admin and /superadmin)
     if (path === '/super-admin' || path.startsWith('/super-admin') || path === '/superadmin' || path.startsWith('/superadmin')) {
-      if (currentUser?.role !== 'super_admin') {
+      if (currentUser && currentUser.role !== 'super_admin') {
         addAuditLog('FORBIDDEN_SUPERADMIN_ACCESS', path, `Unauthorized user blocked from accessing ${path}`);
         setSecurityNotice('Access Denied: /super-admin is accessible only to super_admin.');
         navigate('/');
@@ -209,10 +209,10 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     // 2. ADMIN ROUTES PROTECTION (/admin)
+    // Requirement 6: If a customer opens /admin or /superadmin, redirect to the homepage.
     if (path === '/admin' || path.startsWith('/admin')) {
-      const isAdminOrSuper = currentUser?.role === 'admin' || currentUser?.role === 'super_admin';
-      if (!isAdminOrSuper) {
-        addAuditLog('FORBIDDEN_ADMIN_ACCESS', path, `Customer or guest blocked from accessing ${path}`);
+      if (currentUser && currentUser.role === 'customer') {
+        addAuditLog('FORBIDDEN_ADMIN_ACCESS', path, `Customer blocked from accessing ${path}`);
         setSecurityNotice('Access Denied: /admin is accessible only to administrators.');
         navigate('/');
         return;

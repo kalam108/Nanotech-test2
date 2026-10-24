@@ -65,10 +65,34 @@ export function CheckoutModal({
     }
   }, [initialMethod, initialBank, isOpen]);
 
+  const [storeSettings, setStoreSettings] = useState<{ delivery_fee: number; free_delivery_above: number }>({
+    delivery_fee: 150,
+    free_delivery_above: 5000,
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    fetch('/api/settings')
+      .then(res => res.json())
+      .then(data => {
+        if (!isMounted) return;
+        const fee = data?.delivery_fee ?? data?.settings?.delivery_fee;
+        const freeAbove = data?.free_delivery_above ?? data?.settings?.free_delivery_above;
+        setStoreSettings({
+          delivery_fee: typeof fee === 'number' ? fee : Number(fee) || 150,
+          free_delivery_above: typeof freeAbove === 'number' ? freeAbove : Number(freeAbove) || 5000,
+        });
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   if (!isOpen) return null;
 
   const subtotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
-  const deliveryFee = subtotal > 200 ? 0 : 15;
+  const deliveryFee = subtotal >= storeSettings.free_delivery_above ? 0 : storeSettings.delivery_fee;
   const total = subtotal + deliveryFee;
 
   const getReadablePaymentMethodString = () => {
@@ -275,6 +299,9 @@ export function CheckoutModal({
                 <div className="flex justify-between text-slate-500">
                   <span>Insured Shipping Fee</span>
                   <span>{deliveryFee === 0 ? <strong className="text-emerald-600 font-bold">FREE</strong> : formatPricePrimary(deliveryFee)}</span>
+                </div>
+                <div className="text-[11px] text-slate-500">
+                  Free delivery above NPR {storeSettings.free_delivery_above}
                 </div>
                 <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline font-extrabold text-sm text-slate-900">
                   <span>Total Amount</span>

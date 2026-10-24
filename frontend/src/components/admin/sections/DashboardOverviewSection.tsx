@@ -1,544 +1,454 @@
-import React, { useState } from 'react';
+'use client';
+
+import React, { useState, useEffect } from 'react';
 import { useAdmin } from '../../../context/AdminContext';
-import { useApp } from '../../../context/AppContext';
+import { supabase } from '../../../lib/supabase';
 import {
-  DollarSign,
   ShoppingBag,
-  Users,
-  Package,
   TrendingUp,
-  ArrowUp,
-  ArrowDown,
-  Calendar,
-  ChevronDown,
+  AlertTriangle,
   Clock,
+  ArrowRight,
+  Eye,
   CheckCircle2,
-  AlertCircle,
-  HelpCircle,
-  Headphones,
-  Watch,
-  Speaker,
-  Mouse,
-  Wallet,
-  ArrowUpRight,
-  ArrowDownRight,
-  Boxes,
+  RefreshCw,
 } from 'lucide-react';
 import {
-  AreaChart,
-  Area,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
-  CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
+  CartesianGrid,
 } from 'recharts';
 
+interface DashboardData {
+  ordersToday: number;
+  salesTodayNPR: number;
+  lowStockCount: number;
+  pendingOrdersCount: number;
+  salesLast7Days: { date: string; day: string; sales: number }[];
+  tasks: {
+    paymentsToVerify: number;
+    productsRunningLow: number;
+    ordersPendingOver2Days: number;
+  };
+  recentOrders: {
+    id: string;
+    customerName: string;
+    customerEmail?: string;
+    amount: number;
+    status: string;
+    paymentStatus: string;
+    createdAt: string;
+  }[];
+}
+
 export function DashboardOverviewSection() {
-  const { setAdminSubView, setSelectedAdminOrderId, settings } = useAdmin();
-  const { orders, products } = useApp();
+  const { setAdminSubView, setSelectedAdminOrderId } = useAdmin();
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const [revenueTimeframe, setRevenueTimeframe] = useState<'This Week' | 'This Month' | 'This Year'>('This Month');
-  const [salesTimeframe, setSalesTimeframe] = useState<'This Week' | 'This Month' | 'This Year'>('This Month');
+  const fetchDashboardData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token || localStorage.getItem('nanotech_session_token') || '';
 
-  // Revenue chart data matching the mockup line curve
-  const revenueChartData = [
-    { day: 'Aug 1', revenue: 190000 },
-    { day: 'Aug 2', revenue: 140000 },
-    { day: 'Aug 3', revenue: 160000 },
-    { day: 'Aug 4', revenue: 290000 },
-    { day: 'Aug 5', revenue: 340000 },
-    { day: 'Aug 6', revenue: 320000 },
-    { day: 'Aug 7', revenue: 280000 },
-    { day: 'Aug 8', revenue: 260000 },
-    { day: 'Aug 9', revenue: 310000 },
-    { day: 'Aug 10', revenue: 420000 },
-    { day: 'Aug 11', revenue: 390000 },
-    { day: 'Aug 12', revenue: 350000 },
-    { day: 'Aug 13', revenue: 420000 },
-    { day: 'Aug 14', revenue: 250000 },
-  ];
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
 
-  // Sales by Category data matching the mockup donut chart
-  const categoryData = [
-    { name: 'Electronics', value: 35, color: '#FDD835' }, // Yellow
-    { name: 'Accessories', value: 25, color: '#9333EA' }, // Purple
-    { name: 'Clothing', value: 20, color: '#FB923C' },    // Orange
-    { name: 'Home & Living', value: 15, color: '#60A5FA' }, // Blue
-    { name: 'Others', value: 5, color: '#34D399' },        // Green
-  ];
+      const res = await fetch('/api/admin/dashboard', { headers });
+      if (!res.ok) {
+        throw new Error(`Failed to fetch dashboard data (${res.status})`);
+      }
+      const json = await res.json();
+      setData(json);
+    } catch (err: any) {
+      console.warn('Dashboard fetch error:', err);
+      // Fallback zeroed structure (strict rule: no fake/sample numbers)
+      setData({
+        ordersToday: 0,
+        salesTodayNPR: 0,
+        lowStockCount: 0,
+        pendingOrdersCount: 0,
+        salesLast7Days: [
+          { day: 'Day 1', date: '', sales: 0 },
+          { day: 'Day 2', date: '', sales: 0 },
+          { day: 'Day 3', date: '', sales: 0 },
+          { day: 'Day 4', date: '', sales: 0 },
+          { day: 'Day 5', date: '', sales: 0 },
+          { day: 'Day 6', date: '', sales: 0 },
+          { day: 'Today', date: '', sales: 0 },
+        ],
+        tasks: {
+          paymentsToVerify: 0,
+          productsRunningLow: 0,
+          ordersPendingOver2Days: 0,
+        },
+        recentOrders: [],
+      });
+      setError(err?.message || 'Could not connect to dashboard API');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  // Mock Orders matching the exact items in mockup image
-  const recentOrders = [
-    { id: 'ORD-001458', customer: 'John Doe', status: 'Completed', statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-500' },
-    { id: 'ORD-001457', customer: 'Jane Smith', status: 'Processing', statusColor: 'bg-blue-50 text-blue-700 border-blue-500' },
-    { id: 'ORD-001456', customer: 'Robert Brown', status: 'Pending', statusColor: 'bg-amber-50 text-amber-700 border-amber-500' },
-    { id: 'ORD-001455', customer: 'Emily Davis', status: 'Completed', statusColor: 'bg-emerald-50 text-emerald-700 border-emerald-500' },
-  ];
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
 
-  // Top Selling Products matching mockup image
-  const topSellingProducts = [
-    {
-      name: 'Wireless Headphones',
-      price: 'Rs. 2,499',
-      sold: '256 Sold',
-      icon: Headphones,
-      imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=120&auto=format&fit=crop&q=80',
-    },
-    {
-      name: 'Smart Watch',
-      price: 'Rs. 3,999',
-      sold: '189 Sold',
-      icon: Watch,
-      imageUrl: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=120&auto=format&fit=crop&q=80',
-    },
-    {
-      name: 'Bluetooth Speaker',
-      price: 'Rs. 1,999',
-      sold: '156 Sold',
-      icon: Speaker,
-      imageUrl: 'https://images.unsplash.com/photo-1545454675-3531b543be5d?w=120&auto=format&fit=crop&q=80',
-    },
-    {
-      name: 'Gaming Mouse',
-      price: 'Rs. 1,299',
-      sold: '134 Sold',
-      icon: Mouse,
-      imageUrl: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=120&auto=format&fit=crop&q=80',
-    },
-  ];
-
-  // Recent Transactions matching mockup image
-  const recentTransactions = [
-    {
-      title: 'Payment from John Doe',
-      date: 'Aug 14, 2026',
-      amount: '+ Rs. 2,560',
-      type: 'income',
-    },
-    {
-      title: 'Payment to Supplier',
-      date: 'Aug 14, 2026',
-      amount: '- Rs. 15,000',
-      type: 'expense',
-    },
-    {
-      title: 'Payment from Jane Smith',
-      date: 'Aug 13, 2026',
-      amount: '+ Rs. 1,299',
-      type: 'income',
-    },
-    {
-      title: 'Marketing Expense',
-      date: 'Aug 13, 2026',
-      amount: '- Rs. 5,000',
-      type: 'expense',
-    },
-  ];
+  const getStatusBadge = (status: string) => {
+    const s = status.toLowerCase();
+    if (s === 'delivered' || s === 'completed') {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+          Delivered
+        </span>
+      );
+    }
+    if (s === 'processing' || s === 'shipped') {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
+          {s.charAt(0).toUpperCase() + s.slice(1)}
+        </span>
+      );
+    }
+    if (s === 'cancelled') {
+      return (
+        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+          Cancelled
+        </span>
+      );
+    }
+    return (
+      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+        Pending
+      </span>
+    );
+  };
 
   return (
-    <div className="space-y-5 select-none font-sans">
-      {/* Top Header: Title, Breadcrumb & Date */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+    <div className="space-y-6 font-poppins animate-in fade-in duration-150">
+      {/* Header bar with Refresh */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
-            Dashboard
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
+            Dashboard Overview
           </h1>
-          <div className="flex items-center gap-1 text-xs text-slate-500 font-medium mt-0.5">
-            <span className="hover:text-slate-800 cursor-pointer" onClick={() => setAdminSubView('dashboard')}>
-              Home
-            </span>
-            <span>&gt;</span>
-            <span className="text-slate-800 font-bold">Dashboard</span>
-          </div>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Real-time store operations, inventory status, and pending fulfillment tasks.
+          </p>
         </div>
-
-        <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-white/70 px-3.5 py-1.5 rounded-full border border-amber-300/60 shadow-xs self-start sm:self-auto">
-          <span>Today :</span>
-          <span className="font-extrabold text-slate-900">Aug 14, 2026</span>
-          <Calendar className="w-3.5 h-3.5 text-slate-600 ml-1" />
-        </div>
+        <button
+          type="button"
+          onClick={fetchDashboardData}
+          disabled={loading}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold shadow-2xs transition-all cursor-pointer disabled:opacity-50"
+          title="Refresh dashboard metrics"
+        >
+          <RefreshCw className={`w-3.5 h-3.5 text-[#0F766E] ${loading ? 'animate-spin' : ''}`} />
+          <span>Refresh</span>
+        </button>
       </div>
 
-      {/* Row 1: 5 KPI Cards (Exact User Card Spec: Glass-transparent, rounded-2xl, crisp typography) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* 1. Total Revenue */}
-        <div className="admin-metric-card">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block truncate">
-            Total Revenue
-          </span>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">
-            Rs. 1,250,000
-          </h3>
-          <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-            <span>12.5% from last month</span>
-          </p>
-        </div>
-
-        {/* 2. Total Orders */}
-        <div className="admin-metric-card">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block truncate">
-            Total Orders
-          </span>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">
-            1,458
-          </h3>
-          <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-            <span>8.3% from last month</span>
-          </p>
-        </div>
-
-        {/* 3. Total Customers */}
-        <div className="admin-metric-card">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block truncate">
-            Total Customers
-          </span>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">
-            3,254
-          </h3>
-          <p className="text-xs text-emerald-600 font-semibold mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-            <span>15.7% from last month</span>
-          </p>
-        </div>
-
-        {/* 4. Total Products */}
-        <div className="admin-metric-card">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block truncate">
-            Catalog Hardware
-          </span>
-          <h3 className="text-2xl font-bold text-slate-900 mt-1">
-            456
-          </h3>
-          <p className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1">
-            <Package className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-            <span>28 categories live</span>
-          </p>
-        </div>
-
-        {/* 5. Net Profit */}
-        <div className="admin-metric-card">
-          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider block truncate">
-            Net Profit (Fiscal YTD)
-          </span>
-          <h3 className="text-2xl font-bold text-emerald-600 mt-1">
-            Rs. 320,000
-          </h3>
-          <p className="text-xs text-slate-500 font-medium mt-1">
-            Revenues minus expenses
-          </p>
-        </div>
-      </div>
-
-      {/* Row 2: 2 Charts (Revenue Overview & Sales by Category) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Left: Revenue Overview (2 Cols) */}
-        <div className="lg:col-span-2 admin-card-glass p-6 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Revenue Overview</h2>
-            <div className="relative">
-              <select
-                value={revenueTimeframe}
-                onChange={(e) => setRevenueTimeframe(e.target.value as any)}
-                className="bg-slate-50/80 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
-              >
-                <option value="This Week">This Week</option>
-                <option value="This Month">This Month</option>
-                <option value="This Year">This Year</option>
-              </select>
+      {/* 1. 4 METRIC CARDS */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Orders Today */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Orders Today</span>
+            <div className="w-8 h-8 rounded-xl bg-[#0F766E]/10 flex items-center justify-center text-[#0F766E]">
+              <ShoppingBag className="w-4 h-4" />
             </div>
           </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueChartData} margin={{ top: 10, right: 10, left: -15, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="yellowAreaGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#FDD835" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#FDD835" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                <XAxis
-                  dataKey="day"
-                  stroke="#94a3b8"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={{ stroke: '#e2e8f0' }}
-                />
-                <YAxis
-                  stroke="#94a3b8"
-                  fontSize={10}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `Rs. ${v >= 1000 ? `${v / 1000}K` : v}`}
-                />
-                <Tooltip
-                  formatter={(val: number) => [`Rs. ${val.toLocaleString()}`, 'Revenue']}
-                  contentStyle={{
-                    backgroundColor: '#ffffff',
-                    borderColor: '#fef08a',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    fontWeight: 'bold',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-                  }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="revenue"
-                  stroke="#FDD835"
-                  strokeWidth={3}
-                  fillOpacity={1}
-                  fill="url(#yellowAreaGradient)"
-                  dot={{ r: 4, fill: '#FDD835', stroke: '#ffffff', strokeWidth: 2 }}
-                  activeDot={{ r: 6, fill: '#EAB308', stroke: '#ffffff', strokeWidth: 2 }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="mt-3 text-2xl font-black text-slate-900">
+            {loading ? '...' : (data?.ordersToday ?? 0)}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            Received today
           </div>
         </div>
 
-        {/* Right: Sales by Category Donut Chart */}
-        <div className="admin-card-glass p-6 space-y-3 flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Sales by Category</h2>
-            <select
-              value={salesTimeframe}
-              onChange={(e) => setSalesTimeframe(e.target.value as any)}
-              className="bg-slate-50/80 border border-slate-200 rounded-lg px-2.5 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-1 focus:ring-amber-400 cursor-pointer"
-            >
-              <option value="This Week">This Week</option>
-              <option value="This Month">This Month</option>
-              <option value="This Year">This Year</option>
-            </select>
+        {/* Card 2: Sales Today in NPR (paid orders only) */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Sales Today (NPR)</span>
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+              <TrendingUp className="w-4 h-4" />
+            </div>
           </div>
+          <div className="mt-3 text-2xl font-black text-emerald-700">
+            {loading ? '...' : `Rs. ${(data?.salesTodayNPR ?? 0).toLocaleString()}`}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            Paid orders only
+          </div>
+        </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 py-2">
-            {/* Donut graphic */}
-            <div className="h-44 w-44 relative shrink-0">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={categoryData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={68}
-                    paddingAngle={3}
-                    dataKey="value"
+        {/* Card 3: Low Stock */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Low Stock</span>
+            <div className="w-8 h-8 rounded-xl bg-rose-50 flex items-center justify-center text-rose-600">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-2xl font-black text-rose-600">
+            {loading ? '...' : (data?.lowStockCount ?? 0)}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            Stock ≤ low stock threshold
+          </div>
+        </div>
+
+        {/* Card 4: Pending Orders */}
+        <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-2xs">
+          <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+            <span>Pending Orders</span>
+            <div className="w-8 h-8 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600">
+              <Clock className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="mt-3 text-2xl font-black text-amber-700">
+            {loading ? '...' : (data?.pendingOrdersCount ?? 0)}
+          </div>
+          <div className="mt-1 text-[11px] text-slate-500">
+            Awaiting processing
+          </div>
+        </div>
+      </div>
+
+      {/* 2. GRID: SALES OF LAST 7 DAYS (BAR CHART) + "YOUR TASKS" BOX */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Bar Chart: Sales of last 7 days (2 Columns) */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div>
+                <h2 className="font-bold text-slate-900 text-sm">
+                  Sales of Last 7 Days (NPR)
+                </h2>
+                <p className="text-[11px] text-slate-500">
+                  Daily revenue generated from fulfilled & paid orders.
+                </p>
+              </div>
+            </div>
+
+            <div className="h-64 mt-4 w-full">
+              {loading ? (
+                <div className="h-full flex items-center justify-center text-xs text-slate-400">
+                  Loading chart...
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={data?.salesLast7Days || []}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
                   >
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip formatter={(value: number) => [`${value}%`, 'Share']} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* Category Legend list */}
-            <div className="space-y-1.5 text-xs w-full sm:w-auto">
-              {categoryData.map((cat) => (
-                <div key={cat.name} className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className="w-2.5 h-2.5 rounded-sm"
-                      style={{ backgroundColor: cat.color }}
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                    <XAxis
+                      dataKey="day"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748B', fontSize: 11 }}
                     />
-                    <span className="text-slate-700 font-medium text-[11px]">{cat.name}</span>
-                  </div>
-                  <span className="font-bold text-slate-900 text-[11px]">{cat.value}%</span>
-                </div>
-              ))}
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fill: '#64748B', fontSize: 11 }}
+                      tickFormatter={(v) => `Rs. ${v >= 1000 ? `${v / 1000}k` : v}`}
+                    />
+                    <Tooltip
+                      formatter={(value: any) => [`Rs. ${Number(value).toLocaleString()}`, 'Paid Sales']}
+                      labelFormatter={(label) => `Day: ${label}`}
+                      contentStyle={{
+                        backgroundColor: '#FFFFFF',
+                        border: '1px solid #E2E8F0',
+                        borderRadius: '12px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.05)',
+                        fontSize: '12px',
+                      }}
+                    />
+                    <Bar
+                      dataKey="sales"
+                      fill="#0F766E"
+                      radius={[6, 6, 0, 0]}
+                      maxBarSize={48}
+                    />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
+          </div>
+        </div>
+
+        {/* "Your Tasks" Box (1 Column) */}
+        <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 mb-4">
+              <h2 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#0F766E]" />
+                Your Tasks
+              </h2>
+              <span className="text-[10px] font-bold text-[#0F766E] bg-[#0F766E]/10 px-2 py-0.5 rounded-full">
+                Action Required
+              </span>
+            </div>
+
+            <div className="space-y-3.5">
+              {/* Row 1: Payments to verify */}
+              <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-900">
+                    Payments to verify
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {data?.tasks.paymentsToVerify ?? 0} pending payment confirmations
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('orders')}
+                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[#0F766E] text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Review Orders
+                </button>
+              </div>
+
+              {/* Row 2: Products running low */}
+              <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-900">
+                    Products running low
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {data?.tasks.productsRunningLow ?? 0} items at or below threshold
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('products')}
+                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[#0F766E] text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-2xs"
+                >
+                  View Inventory
+                </button>
+              </div>
+
+              {/* Row 3: Orders pending > 2 days */}
+              <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold text-slate-900">
+                    Orders pending &gt; 2 days
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-medium">
+                    {data?.tasks.ordersPendingOver2Days ?? 0} delayed dispatches
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setAdminSubView('orders')}
+                  className="px-2.5 py-1.5 rounded-lg bg-white hover:bg-slate-100 border border-slate-200 text-[#0F766E] text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-2xs"
+                >
+                  Check Pending
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 pt-3 border-t border-slate-100 text-[11px] text-slate-400 text-center">
+            Completing tasks keeps store fulfillment speed optimal.
           </div>
         </div>
       </div>
 
-      {/* Row 3: 3 Column List Cards (Recent Orders, Top Selling Products, Recent Transactions) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Card 1: Recent Orders */}
-        <div className="admin-card-glass p-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Recent Orders</h2>
-            <button
-              onClick={() => setAdminSubView('orders')}
-              className="text-[11px] font-bold text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              View All
-            </button>
+      {/* 3. RECENT ORDERS TABLE (LAST 5 ORDERS) */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+        <div className="p-5 border-b border-slate-100 flex items-center justify-between">
+          <div>
+            <h2 className="font-bold text-slate-900 text-sm">Recent Orders</h2>
+            <p className="text-[11px] text-slate-500">
+              Last 5 orders placed across the store.
+            </p>
           </div>
-
-          <div className="space-y-2.5">
-            {recentOrders.map((ord) => (
-              <div
-                key={ord.id}
-                onClick={() => {
-                  setSelectedAdminOrderId(ord.id);
-                  setAdminSubView('orders');
-                }}
-                className="flex items-center justify-between p-2.5 rounded-xl hover:bg-slate-50/80 border border-slate-100/90 cursor-pointer transition-all"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 shrink-0">
-                    <Boxes className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <div className="text-xs font-bold text-slate-900 font-mono">#{ord.id}</div>
-                    <div className="text-[11px] text-slate-500">{ord.customer}</div>
-                  </div>
-                </div>
-
-                <div
-                  className={`text-[10px] font-bold px-2.5 py-0.5 rounded-md border-l-3 ${ord.statusColor}`}
-                >
-                  {ord.status}
-                </div>
-              </div>
-            ))}
-          </div>
+          <button
+            type="button"
+            onClick={() => setAdminSubView('orders')}
+            className="text-xs text-[#0F766E] hover:text-[#0b5c56] font-bold flex items-center gap-1 cursor-pointer"
+          >
+            <span>View All Orders</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        {/* Card 2: Top Selling Products */}
-        <div className="admin-card-glass p-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Top Selling Products</h2>
-            <button
-              onClick={() => setAdminSubView('products')}
-              className="text-[11px] font-bold text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="space-y-2.5">
-            {topSellingProducts.map((prod, idx) => (
-              <div
-                key={idx}
-                className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50/80 border border-slate-100/90 transition-all"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  <img
-                    src={prod.imageUrl}
-                    alt={prod.name}
-                    className="w-9 h-9 rounded-lg object-cover bg-slate-100 border border-slate-200 shrink-0"
-                  />
-                  <div className="min-w-0">
-                    <div className="text-xs font-bold text-slate-900 truncate">{prod.name}</div>
-                    <div className="text-[11px] font-extrabold text-slate-800">{prod.price}</div>
-                  </div>
-                </div>
-
-                <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 shrink-0">
-                  {prod.sold}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Card 3: Recent Transactions */}
-        <div className="admin-card-glass p-6 space-y-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900">Recent Transactions</h2>
-            <button
-              onClick={() => setAdminSubView('accounting')}
-              className="text-[11px] font-bold text-slate-600 hover:text-slate-900 transition-colors"
-            >
-              View All
-            </button>
-          </div>
-
-          <div className="space-y-2.5">
-            {recentTransactions.map((tx, idx) => {
-              const isIncome = tx.type === 'income';
-              return (
-                <div
-                  key={idx}
-                  className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-50/80 border border-slate-100/90 transition-all"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                        isIncome ? 'bg-emerald-100 text-emerald-600' : 'bg-rose-100 text-rose-600'
-                      }`}
-                    >
-                      {isIncome ? (
-                        <ArrowUp className="w-4 h-4 stroke-[2.5]" />
-                      ) : (
-                        <ArrowDown className="w-4 h-4 stroke-[2.5]" />
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
+              <tr>
+                <th className="py-3 px-4">Order ID</th>
+                <th className="py-3 px-4">Customer</th>
+                <th className="py-3 px-4">Amount</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                    Loading recent orders...
+                  </td>
+                </tr>
+              ) : !data?.recentOrders || data.recentOrders.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-slate-400">
+                    No data yet
+                  </td>
+                </tr>
+              ) : (
+                data.recentOrders.map((order) => (
+                  <tr key={order.id} className="hover:bg-slate-50/70 transition-colors">
+                    <td className="py-3.5 px-4 font-mono font-bold text-slate-800">
+                      {order.id}
+                    </td>
+                    <td className="py-3.5 px-4 text-slate-700">
+                      <div className="font-semibold text-slate-900">{order.customerName}</div>
+                      {order.customerEmail && (
+                        <div className="text-[11px] text-slate-400 font-mono">
+                          {order.customerEmail}
+                        </div>
                       )}
-                    </div>
-                    <div>
-                      <div className="text-xs font-bold text-slate-900">{tx.title}</div>
-                      <div className="text-[10px] text-slate-400">{tx.date}</div>
-                    </div>
-                  </div>
-
-                  <span
-                    className={`text-xs font-extrabold ${
-                      isIncome ? 'text-emerald-600' : 'text-rose-600'
-                    }`}
-                  >
-                    {tx.amount}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Row 4: Budget Overview Card (Full Width) */}
-      <div className="admin-card-glass p-6 space-y-4">
-        <h2 className="text-sm font-bold text-slate-900">Budget Overview</h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
-          {/* Monthly Budget */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500 font-semibold">Monthly Budget</span>
-              <span className="font-bold text-slate-900">50%</span>
-            </div>
-            <div className="text-xs font-extrabold text-slate-900">
-              Rs. 250,000 <span className="text-slate-400 font-normal">/ Rs. 500,000</span>
-            </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#FDD835] h-full rounded-full w-1/2" />
-            </div>
-          </div>
-
-          {/* Yearly Budget */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-slate-500 font-semibold">Yearly Budget</span>
-              <span className="font-bold text-slate-900">50%</span>
-            </div>
-            <div className="text-xs font-extrabold text-slate-900">
-              Rs. 2,500,000 <span className="text-slate-400 font-normal">/ Rs. 5,000,000</span>
-            </div>
-            <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-              <div className="bg-[#FDD835] h-full rounded-full w-1/2" />
-            </div>
-          </div>
-
-          {/* Remaining Budget Summary */}
-          <div className="flex items-center justify-between p-3 rounded-xl bg-purple-50/60 border border-purple-100">
-            <div>
-              <div className="text-[11px] text-slate-500 font-semibold">Remaining Budget</div>
-              <div className="text-lg font-black text-slate-900">Rs. 2,500,000</div>
-              <div className="text-[10px] font-bold text-purple-700">50% Remaining</div>
-            </div>
-            <div className="w-10 h-10 rounded-xl bg-purple-600 text-white flex items-center justify-center shadow-xs">
-              <Wallet className="w-5 h-5" />
-            </div>
-          </div>
+                    </td>
+                    <td className="py-3.5 px-4 font-bold text-slate-900">
+                      Rs. {order.amount.toLocaleString()}
+                    </td>
+                    <td className="py-3.5 px-4">
+                      {getStatusBadge(order.status)}
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAdminOrderId(order.id);
+                          setAdminSubView('orders');
+                        }}
+                        className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-[#0F766E] hover:text-white text-slate-700 text-xs font-semibold transition-colors cursor-pointer"
+                        title="View Order Details"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>View</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

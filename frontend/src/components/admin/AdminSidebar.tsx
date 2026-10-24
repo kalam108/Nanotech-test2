@@ -1,57 +1,28 @@
+'use client';
+
 import React from 'react';
 import { useAdmin, AdminSubView } from '../../context/AdminContext';
 import { useApp } from '../../context/AppContext';
 import AccountMenu from './AccountMenu';
 import {
   LayoutDashboard,
-  BarChart3,
-  FileText,
   Package,
   FolderTree,
-  Boxes,
-  Bookmark,
   ShoppingBag,
   Users,
-  Store,
-  Star,
-  DollarSign,
-  Receipt,
-  ArrowLeftRight,
-  PiggyBank,
-  FileSpreadsheet,
-  BookOpen,
-  Scale,
-  Menu as MenuIcon,
-  PanelLeft,
+  FileText,
   Image,
   Tag,
-  FileCode,
-  Shield,
   Settings,
-  History,
-  Database,
-  LogOut,
   ChevronLeft,
   ChevronRight,
-  Sparkles,
-  Wrench,
-  TrendingDown,
-  MapPin,
-  Building2,
 } from 'lucide-react';
 
-interface NavItem {
+interface SidebarItem {
   id: AdminSubView;
   label: string;
   icon: React.ElementType;
-  badge?: string | number;
-  badgeColor?: string;
-  roles?: string[];
-}
-
-interface NavSection {
-  title: string;
-  items: NavItem[];
+  badge?: number;
 }
 
 export function AdminSidebar() {
@@ -62,251 +33,159 @@ export function AdminSidebar() {
     setIsSidebarCollapsed,
     isMobileDrawerOpen,
     setIsMobileDrawerOpen,
-    currentAdmin,
-    logoutAdmin,
   } = useAdmin();
 
-  const { products, orders, sellers, reviews } = useApp();
+  const { orders } = useApp();
 
-  const pendingOrdersCount = orders.filter((o) => o.status === 'pending').length;
-  const pendingSellersCount = sellers.filter((s) => s.status === 'pending').length;
-  const lowStockCount = products.filter((p) => p.stock < 5).length;
+  // Number of pending orders
+  const pendingOrdersCount = orders.filter(
+    (o) => (o.status || '').toLowerCase() === 'pending'
+  ).length;
 
-  // Exact Sidebar Structure with PC Builder, Price Tracker, Brands & Stores Included
-  const navSections: NavSection[] = [
+  // EXACTLY 9 ITEMS IN THIS EXACT ORDER:
+  // 1. Dashboard
+  // 2. Products
+  // 3. Categories
+  // 4. Orders (badge = number of pending orders)
+  // 5. Customers
+  // 6. Reports
+  // 7. Banners
+  // 8. Offers & Discounts
+  // 9. Settings
+  const navItems: SidebarItem[] = [
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+    { id: 'products', label: 'Products', icon: Package },
+    { id: 'categories', label: 'Categories', icon: FolderTree },
     {
-      title: 'OVERVIEW',
-      items: [
-        { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-        { id: 'analytics', label: 'Analytics', icon: BarChart3 },
-        { id: 'reports', label: 'Reports', icon: FileText },
-      ],
+      id: 'orders',
+      label: 'Orders',
+      icon: ShoppingBag,
+      badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined,
     },
-    {
-      title: 'HARDWARE & CATALOG',
-      items: [
-        { id: 'products', label: 'Products', icon: Package, badge: products.length },
-        { id: 'categories', label: 'Categories', icon: FolderTree },
-        {
-          id: 'inventory',
-          label: 'Inventory',
-          icon: Boxes,
-          badge: lowStockCount > 0 ? lowStockCount : undefined,
-          badgeColor: 'bg-rose-500/20 text-rose-900 border border-rose-400/40 font-bold',
-        },
-        { id: 'brands', label: 'Brands', icon: Bookmark, badge: 'Official' },
-        { id: 'pc_builder', label: 'PC Builder', icon: Wrench, badge: 'AM5/LGA' },
-        { id: 'price_tracker', label: 'Price Tracker', icon: TrendingDown, badge: 'NPR Live' },
-        { id: 'stores', label: 'Stores', icon: MapPin, badge: 'Hubs' },
-      ],
-    },
-    {
-      title: 'ORDERS & USERS',
-      items: [
-        {
-          id: 'orders',
-          label: 'Orders',
-          icon: ShoppingBag,
-          badge: pendingOrdersCount > 0 ? pendingOrdersCount : undefined,
-          badgeColor: 'bg-amber-500/25 text-amber-950 border border-amber-500/40 font-bold',
-        },
-        { id: 'customers', label: 'Customers', icon: Users },
-        {
-          id: 'sellers',
-          label: 'Sellers',
-          icon: Store,
-          badge: pendingSellersCount > 0 ? `${pendingSellersCount}` : undefined,
-          badgeColor: 'bg-indigo-500/20 text-indigo-950 border border-indigo-400/40 font-bold',
-        },
-        { id: 'reviews', label: 'Reviews', icon: Star },
-      ],
-    },
-    {
-      title: 'ACCOUNTING & SHEETS',
-      items: [
-        {
-          id: 'excel_sheets',
-          label: 'Online Excel',
-          icon: FileSpreadsheet,
-          badge: 'Live',
-          badgeColor: 'bg-emerald-500/20 text-emerald-950 border border-emerald-400/40 font-bold text-[10px]',
-        },
-        {
-          id: 'tally_accounting',
-          label: 'Tally Accounting',
-          icon: BookOpen,
-          badge: 'GAAP',
-          badgeColor: 'bg-amber-500/25 text-amber-950 border border-amber-400/40 font-bold text-[10px]',
-        },
-        { id: 'revenue', label: 'Revenue', icon: DollarSign },
-        { id: 'expenses', label: 'Expenses', icon: Receipt },
-        { id: 'transactions', label: 'Transactions', icon: ArrowLeftRight },
-        { id: 'budget', label: 'Budget', icon: PiggyBank },
-        { id: 'excel', label: 'Excel Import/Export', icon: FileSpreadsheet },
-      ],
-    },
-    {
-      title: 'CONTENT',
-      items: [
-        { id: 'header_menu', label: 'Header Menu', icon: MenuIcon },
-        { id: 'left_menu', label: 'Left Menu', icon: PanelLeft },
-        { id: 'banners', label: 'Banners', icon: Image },
-        { id: 'offers', label: 'Offers', icon: Tag },
-        { id: 'pages', label: 'Pages', icon: FileCode },
-      ],
-    },
-    {
-      title: 'SYSTEM',
-      items: [
-        ...(currentAdmin?.role === 'super_admin'
-          ? [
-              { id: 'users_roles' as AdminSubView, label: 'Users & Roles', icon: Shield },
-              { id: 'settings' as AdminSubView, label: 'Settings', icon: Settings },
-            ]
-          : []),
-        { id: 'activity_logs', label: 'Activity Logs', icon: History },
-        { id: 'backup', label: 'Backup', icon: Database },
-      ],
-    },
+    { id: 'customers', label: 'Customers', icon: Users },
+    { id: 'reports', label: 'Reports', icon: FileText },
+    { id: 'banners', label: 'Banners', icon: Image },
+    { id: 'offers', label: 'Offers & Discounts', icon: Tag },
+    { id: 'settings', label: 'Settings', icon: Settings },
   ];
-
-  const handleNavClick = (view: AdminSubView) => {
-    // Admin must NOT access super admin settings or user role changes
-    if ((view === 'users_roles' || view === 'admin_users' || view === 'settings') && currentAdmin?.role !== 'super_admin') {
-      return;
-    }
-    setAdminSubView(view);
-    setIsMobileDrawerOpen(false);
-  };
-
-  const sidebarContent = (
-    <div className="relative flex flex-col h-full text-[#1A1A1A] select-none overflow-hidden bg-white">
-      {/* Top Status & Hub Indicator (when expanded) */}
-      {!isSidebarCollapsed && (
-        <div className="relative z-10 px-3.5 pt-3 pb-2.5 border-b border-[#EDEDED] flex items-center justify-between bg-white">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-2 w-2">
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#1A1A1A]"></span>
-            </span>
-            <span className="text-[11px] font-medium text-[#1A1A1A] tracking-tight">Itahari Control Hub</span>
-          </div>
-          <span className="text-[10px] font-medium px-2 py-0.5 rounded-[6px] bg-[#F3F3F3] text-[#1A1A1A] border border-[#EDEDED]">
-            Live
-          </span>
-        </div>
-      )}
-
-      {/* Navigation Sections */}
-      <div className="relative z-10 flex-1 overflow-y-auto px-2 py-3 space-y-4 scrollbar-thin scrollbar-thumb-slate-200 hover:scrollbar-thumb-slate-300 scrollbar-track-transparent bg-white">
-        {navSections.map((section, idx) => (
-          <div key={idx} className="space-y-1">
-            {!isSidebarCollapsed ? (
-              <div className="flex items-center justify-between px-2.5 mb-1 mt-1">
-                <h3 className="text-[11px] font-normal uppercase tracking-wider text-[#A0A0A0]">
-                  {section.title}
-                </h3>
-              </div>
-            ) : (
-              <div className="h-px bg-[#EDEDED] my-2 mx-2" />
-            )}
-
-            <div className="space-y-0.5">
-              {section.items.map((item) => {
-                const Icon = item.icon;
-                const isActive =
-                  adminSubView === item.id ||
-                  (item.id === 'excel_sheets' && (adminSubView === 'online_excel' || adminSubView === 'excel_sheets')) ||
-                  (item.id === 'revenue' && adminSubView === 'accounting') ||
-                  (item.id === 'expenses' && adminSubView === 'accounting') ||
-                  (item.id === 'transactions' && adminSubView === 'accounting') ||
-                  (item.id === 'users_roles' && adminSubView === 'admin_users') ||
-                  (item.id === 'reports' && adminSubView === 'reports_gen');
-
-                return (
-                  <button
-                    key={item.id}
-                    id={`admin-nav-${item.id}`}
-                    onClick={() => handleNavClick(item.id)}
-                    title={isSidebarCollapsed ? item.label : undefined}
-                    className={`group w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-[8px] text-[13px] transition-colors relative cursor-pointer ${
-                      isActive
-                        ? 'bg-[#F3F3F3] text-[#1A1A1A] font-medium'
-                        : 'text-[#1A1A1A] hover:bg-[#F5F5F5]'
-                    } ${isSidebarCollapsed ? 'justify-center px-1.5' : 'justify-between'}`}
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Icon
-                        className={`w-[17px] h-[17px] shrink-0 text-[#6B6B6B]`}
-                      />
-                      {!isSidebarCollapsed && (
-                        <span className="truncate">{item.label}</span>
-                      )}
-                    </div>
-
-                    {!isSidebarCollapsed && item.badge !== undefined && (
-                      <span
-                        className="text-[10px] px-2 py-0.5 rounded-[6px] font-medium bg-[#F0F0F0] text-[#6B6B6B]"
-                      >
-                        {item.badge}
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Sidebar Footer with AccountMenu */}
-      <div className="relative z-30 shrink-0 p-2 border-t border-[#EDEDED] bg-white">
-        <AccountMenu
-          adminName={currentAdmin?.name || 'Raju Khadka'}
-          adminRole={currentAdmin?.role ? (currentAdmin.role.charAt(0).toUpperCase() + currentAdmin.role.slice(1)) : 'Admin'}
-          avatarInitials={
-            currentAdmin?.name
-              ? currentAdmin.name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase()
-              : 'RK'
-          }
-          isCollapsed={isSidebarCollapsed}
-          onLogout={logoutAdmin}
-          onNavigate={(target) => {
-            if (target === 'settings' || target === 'profile') {
-              setAdminSubView('settings');
-            } else if (target === 'personalization') {
-              setAdminSubView('content');
-            } else if (target === 'help') {
-              setAdminSubView('reports');
-            }
-          }}
-        />
-      </div>
-    </div>
-  );
 
   return (
     <>
-      {/* Desktop Fixed Left Sidebar */}
-      <aside
-        className={`hidden md:flex flex-col shrink-0 transition-all duration-300 z-20 h-full max-h-full bg-white border-r border-[#EDEDED] select-none ${
-          isSidebarCollapsed ? 'w-16' : 'w-[220px]'
-        }`}
-      >
-        {sidebarContent}
-      </aside>
-
-      {/* Mobile Drawer Overlay */}
+      {/* Mobile Backdrop */}
       {isMobileDrawerOpen && (
-        <div className="fixed inset-0 z-50 md:hidden flex">
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
-            onClick={() => setIsMobileDrawerOpen(false)}
-          />
-          <div className="relative w-64 max-w-[80vw] bg-white border-r border-[#EDEDED] h-full shadow-2xl z-10 flex flex-col">
-            {sidebarContent}
-          </div>
-        </div>
+        <div
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-xs md:hidden"
+          onClick={() => setIsMobileDrawerOpen(false)}
+        />
       )}
+
+      {/* Main Sidebar Shell */}
+      <aside
+        id="admin-primary-sidebar"
+        className={`fixed md:static inset-y-0 left-0 z-40 bg-white border-r border-slate-200/90 flex flex-col shrink-0 transition-all duration-300 font-poppins shadow-xs ${
+          isMobileDrawerOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        } ${isSidebarCollapsed ? 'w-20' : 'w-64'}`}
+      >
+        {/* Top Header / Brand in Teal */}
+        <div className="h-16 px-4 border-b border-slate-100 flex items-center justify-between shrink-0 bg-white">
+          {!isSidebarCollapsed ? (
+            <div
+              onClick={() => setAdminSubView('dashboard')}
+              className="flex items-center gap-2.5 cursor-pointer select-none"
+            >
+              <div className="w-8 h-8 rounded-xl bg-[#0F766E] text-white flex items-center justify-center font-bold text-base shadow-sm">
+                N
+              </div>
+              <div>
+                <span className="font-bold text-slate-900 text-sm tracking-tight">
+                  NanoTech
+                </span>
+                <span className="ml-1 text-[11px] font-semibold text-[#0F766E] bg-[#0F766E]/10 px-1.5 py-0.5 rounded-full">
+                  Admin
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div
+              onClick={() => setAdminSubView('dashboard')}
+              className="w-full flex justify-center cursor-pointer select-none"
+            >
+              <div className="w-8 h-8 rounded-xl bg-[#0F766E] text-white flex items-center justify-center font-bold text-base shadow-sm">
+                N
+              </div>
+            </div>
+          )}
+
+          {/* Desktop Collapse Toggle */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            className="hidden md:flex p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          >
+            {isSidebarCollapsed ? (
+              <ChevronRight className="w-4 h-4" />
+            ) : (
+              <ChevronLeft className="w-4 h-4" />
+            )}
+          </button>
+        </div>
+
+        {/* 9 Navigation Items */}
+        <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto no-scrollbar">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = adminSubView === item.id;
+
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setAdminSubView(item.id);
+                  setIsMobileDrawerOpen(false);
+                }}
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 cursor-pointer ${
+                  isSidebarCollapsed ? 'justify-center' : 'justify-between'
+                } ${
+                  isActive
+                    ? 'bg-[#0F766E] text-white shadow-sm font-bold'
+                    : 'text-slate-600 hover:text-[#0F766E] hover:bg-[#0F766E]/5'
+                }`}
+                title={item.label}
+              >
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon
+                    className={`w-4 h-4 shrink-0 transition-colors ${
+                      isActive ? 'text-white' : 'text-slate-500 group-hover:text-[#0F766E]'
+                    }`}
+                  />
+                  {!isSidebarCollapsed && (
+                    <span className="truncate">{item.label}</span>
+                  )}
+                </div>
+
+                {!isSidebarCollapsed && item.badge !== undefined && (
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold shrink-0 ${
+                      isActive
+                        ? 'bg-white text-[#0F766E]'
+                        : 'bg-amber-100 text-amber-800'
+                    }`}
+                  >
+                    {item.badge}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Bottom Account Menu (Avatar initials, name, email + popup) */}
+        <div className="p-3 border-t border-slate-100 bg-white shrink-0">
+          <AccountMenu isCollapsed={isSidebarCollapsed} />
+        </div>
+      </aside>
     </>
   );
 }

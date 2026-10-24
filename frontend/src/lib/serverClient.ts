@@ -457,3 +457,39 @@ export async function generateProductDescription(productInfo: {
     return { success: false, description: '', error: err?.message || 'Failed to generate product description' };
   }
 }
+
+/**
+ * Check a discount code against the server endpoint POST /api/discounts/check (logged-in users)
+ */
+export async function checkDiscountCode(code: string): Promise<{
+  valid: boolean;
+  type?: 'percent' | 'fixed';
+  value?: number;
+  min_order_amount?: number;
+  error?: string;
+}> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch('/api/discounts/check', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ code }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { valid: false, error: data.error || 'Invalid or expired discount code' };
+    }
+    return {
+      valid: true,
+      type: data.type,
+      value: data.value,
+      min_order_amount: data.min_order_amount,
+    };
+  } catch (err: any) {
+    return { valid: false, error: err?.message || 'Network error' };
+  }
+}
+
