@@ -1,7 +1,7 @@
 import React from 'react';
 import { useRBAC } from '../../../context/RBACContext';
 import { useApp } from '../../../context/AppContext';
-import { SignInCard } from '../../auth/SignInCard';
+import { CustomerAuthFlow } from '../../auth/CustomerAuthFlow';
 
 export const CustomerLoginPage: React.FC = () => {
   const { navigate } = useRBAC();
@@ -10,9 +10,13 @@ export const CustomerLoginPage: React.FC = () => {
   return (
     <div className="min-h-[85vh] flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 bg-slate-50/80">
       <div className="w-full max-w-md flex justify-center">
-        <SignInCard
+        <CustomerAuthFlow
           isModal={false}
-          onSwitchToSignUp={() => navigate('/signup')}
+          initialScreen="signin"
+          onClose={() => {
+            setCurrentView('home');
+            navigate('/');
+          }}
           onSuccess={() => {
             setCurrentView('home');
             navigate('/');
@@ -22,3 +26,5 @@ export const CustomerLoginPage: React.FC = () => {
     </div>
   );
 };
+
+export default CustomerLoginPage;

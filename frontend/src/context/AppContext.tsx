@@ -642,6 +642,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (session.access_token) {
           localStorage.setItem('nanotech_session_token', session.access_token);
         }
+
+        // Google OAuth return: read role from public.profiles; customer -> store home
+        if (userRole === 'customer') {
+          const isOAuthReturn =
+            window.location.hash.includes('access_token') ||
+            window.location.search.includes('code');
+          if (isOAuthReturn) {
+            setCurrentView('home');
+            window.history.replaceState({}, '', '/');
+          }
+        }
       }
     });
 

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { RegisterSplitCard } from '../../components/auth/RegisterSplitCard';
+import { CustomerAuthFlow } from '../../components/auth/CustomerAuthFlow';
 
 interface UserRegisterPageProps {
   onNavigate?: (view: string, params?: Record<string, string>) => void;
@@ -28,12 +28,15 @@ export function UserRegisterPage({ onNavigate }: UserRegisterPageProps) {
       <div className="absolute inset-0 bg-gradient-to-b from-slate-950/85 via-slate-900/65 to-slate-950/95 pointer-events-none" />
 
       <div className="relative z-10 w-full flex justify-center">
-        <RegisterSplitCard
+        <CustomerAuthFlow
           isModal={false}
-          onSwitchToLogin={() => handleNavigate('user_login')}
+          initialScreen="signup"
+          onClose={() => handleNavigate('home')}
           onSuccess={() => handleNavigate('home')}
         />
       </div>
     </div>
   );
 }
+
+export default UserRegisterPage;

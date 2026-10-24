@@ -155,6 +155,17 @@ export const RBACProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
         setCurrentUser(rbacUser);
         setToken(session.access_token);
+
+        // After Google OAuth return, read role from public.profiles; customer -> store home
+        if (resolvedRole === 'customer') {
+          const isOAuthReturn =
+            typeof window !== 'undefined' &&
+            (window.location.hash.includes('access_token') ||
+              window.location.search.includes('code'));
+          if (isOAuthReturn) {
+            navigate('/');
+          }
+        }
       } else {
         setCurrentUser(null);
         setToken(null);
